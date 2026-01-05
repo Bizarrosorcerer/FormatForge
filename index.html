@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FormatForge | Test 3 Fixed</title>
+    <title>FormatForge | Test 4 (Brute Force)</title>
     <style>
         :root {
             --primary: #f59e0b;
@@ -26,7 +27,7 @@
         }
 
         .test-badge {
-            background: #dc2626;
+            background: #16a34a; /* Green for hope */
             color: white;
             padding: 5px 15px;
             border-radius: 20px;
@@ -35,6 +36,7 @@
             margin-bottom: 15px;
             text-transform: uppercase;
             letter-spacing: 1px;
+            box-shadow: 0 0 10px rgba(22, 163, 74, 0.5);
         }
 
         .container {
@@ -50,7 +52,6 @@
 
         h1 { margin: 0; color: var(--primary); text-transform: uppercase; letter-spacing: 2px; }
         
-        /* Upload Box */
         .upload-box {
             border: 2px dashed #475569;
             padding: 40px;
@@ -60,10 +61,8 @@
             margin-top: 20px;
             position: relative;
         }
-        .upload-box:hover { border-color: var(--primary); background: #1e293b; }
         #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 
-        /* Analysis Panel */
         #analysisPanel {
             display: none;
             background: #0f172a;
@@ -77,7 +76,6 @@
         .info-item label { color: #94a3b8; font-size: 0.75rem; display: block; }
         .info-item span { color: #fff; font-weight: bold; font-family: monospace; font-size: 1.1rem; }
 
-        /* Editor */
         #editorSection { display: none; }
         .preview-box {
             background: #000;
@@ -92,7 +90,6 @@
         }
         #previewImg { max-width: 100%; max-height: 100%; object-fit: contain; }
 
-        .controls { text-align: left; margin-bottom: 20px; }
         select {
             width: 100%;
             padding: 12px;
@@ -101,7 +98,7 @@
             color: white;
             border-radius: 6px;
             font-size: 1rem;
-            margin-top: 5px;
+            margin-bottom: 15px;
         }
 
         .btn-forge {
@@ -116,12 +113,11 @@
             cursor: pointer;
             text-transform: uppercase;
         }
-        .btn-forge:hover { background: #fbbf24; }
     </style>
 </head>
 <body>
 
-<div class="test-badge">TEST 3 - FIXED VERSION</div>
+<div class="test-badge">TEST 4: BRUTE FORCE MODE</div>
 
 <div class="container">
     <h1>FormatForge</h1>
@@ -143,10 +139,6 @@
                 <label>FILE SIZE</label>
                 <span id="dispSize">-</span>
             </div>
-            <div class="info-item">
-                <label>DIMENSIONS</label>
-                <span id="dispDims">-</span>
-            </div>
         </div>
     </div>
 
@@ -155,14 +147,11 @@
             <img id="previewImg" src="" alt="Preview">
         </div>
 
-        <div class="controls">
-            <label style="color:#94a3b8; font-size:0.8rem; font-weight:bold;">CONVERT TO:</label>
-            <select id="formatSelect" onchange="updateButtonText()">
-                <option value="image/png">PNG (Lossless)</option>
-                <option value="image/jpeg">JPEG (Compact)</option>
-                <option value="image/webp">WebP (Modern)</option>
-            </select>
-        </div>
+        <select id="formatSelect" onchange="updateButtonText()">
+            <option value="image/png">PNG (Lossless)</option>
+            <option value="image/jpeg">JPEG (Compact)</option>
+            <option value="image/webp">WebP (Modern)</option>
+        </select>
 
         <button class="btn-forge" onclick="forgeImage()" id="forgeBtn">DOWNLOAD AS PNG</button>
         <button onclick="location.reload()" style="background:none; border:none; color:#64748b; margin-top:15px; cursor:pointer; text-decoration:underline;">Start Over</button>
@@ -175,23 +164,17 @@
     const analysisPanel = document.getElementById('analysisPanel');
     const editorSection = document.getElementById('editorSection');
     const dropZone = document.getElementById('dropZone');
-    
-    // Stats elements
     const dispFormat = document.getElementById('dispFormat');
     const dispSize = document.getElementById('dispSize');
-    const dispDims = document.getElementById('dispDims');
     const forgeBtn = document.getElementById('forgeBtn');
 
     let originalFileName = "image";
 
-    // 1. UPLOAD HANDLER
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
         originalFileName = file.name.split('.')[0];
-        
-        // Show Stats
         dispFormat.innerText = file.type || "Unknown";
         dispSize.innerText = (file.size / 1024).toFixed(1) + " KB";
 
@@ -199,40 +182,33 @@
         reader.onload = function(event) {
             previewImg.src = event.target.result;
             previewImg.onload = function() {
-                dispDims.innerText = `${previewImg.naturalWidth} x ${previewImg.naturalHeight}`;
                 dropZone.style.display = 'none';
                 analysisPanel.style.display = 'block';
                 editorSection.style.display = 'block';
-                updateButtonText(); // Set initial button text
+                updateButtonText();
             }
         };
         reader.readAsDataURL(file);
     });
 
-    // 2. UI UPDATE (To confirm selection)
     function updateButtonText() {
         const format = document.getElementById('formatSelect').value;
-        let label = "PNG";
-        if (format === "image/jpeg") label = "JPEG";
-        if (format === "image/webp") label = "WEBP";
+        const label = format.split('/')[1].toUpperCase().replace('JPEG', 'JPG');
         forgeBtn.innerText = `DOWNLOAD AS ${label}`;
     }
 
-    // 3. CONVERSION ENGINE (Fixed Logic)
     function forgeImage() {
         const format = document.getElementById('formatSelect').value;
         const btn = document.getElementById('forgeBtn');
-        
-        btn.innerText = "PROCESSING...";
+        btn.innerText = "FORGING...";
         btn.disabled = true;
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-
         canvas.width = previewImg.naturalWidth;
         canvas.height = previewImg.naturalHeight;
 
-        // FILL BACKGROUND FOR JPEG (Prevent Black Backgrounds)
+        // White background for JPEG only
         if (format === 'image/jpeg') {
             ctx.fillStyle = "#FFFFFF";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -240,41 +216,47 @@
 
         ctx.drawImage(previewImg, 0, 0);
 
-        // --- THE CRITICAL FIX ---
-        // We separate the callback to ensure arguments are passed cleanly
-        const callback = function(blob) {
-            if (!blob) { alert("Error"); return; }
-
-            // Determine Extension
-            let ext = "png";
-            if (format === "image/jpeg") ext = "jpg";
-            if (format === "image/webp") ext = "webp";
-
-            // Create File with explicit MIME type
-            const newFile = new File([blob], `forge.${ext}`, { type: format });
-            const url = URL.createObjectURL(newFile);
-
-            const link = document.createElement('a');
-            link.download = `${originalFileName}_forge.${ext}`;
-            link.href = url;
-            document.body.appendChild(link);
-            link.click();
-
-            setTimeout(() => {
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                updateButtonText();
-                btn.disabled = false;
-            }, 1000);
-        };
-
-        // IF PNG: Do NOT pass quality argument (Browser safety)
-        // IF JPEG/WEBP: Pass quality (0.9)
+        // --- BRUTE FORCE ENGINE ---
+        // We use toDataURL instead of toBlob. This forces the browser to 
+        // return a base64 string strictly in the requested format.
+        
+        let dataUrl;
         if (format === 'image/png') {
-            canvas.toBlob(callback, 'image/png');
+            dataUrl = canvas.toDataURL('image/png');
+        } else if (format === 'image/webp') {
+            dataUrl = canvas.toDataURL('image/webp', 0.9);
         } else {
-            canvas.toBlob(callback, format, 0.9);
+            dataUrl = canvas.toDataURL('image/jpeg', 0.9);
         }
+
+        // Convert Base64 to Blob manually
+        const byteString = atob(dataUrl.split(',')[1]);
+        const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+        }
+        
+        const blob = new Blob([ab], {type: mimeString});
+        
+        // Trigger Download
+        const ext = (format === 'image/jpeg') ? 'jpg' : format.split('/')[1];
+        const newFile = new File([blob], `forge.${ext}`, { type: format });
+        const url = URL.createObjectURL(newFile);
+
+        const link = document.createElement('a');
+        link.download = `${originalFileName}_forge.${ext}`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+
+        setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            btn.disabled = false;
+            updateButtonText();
+        }, 1500);
     }
 </script>
 
