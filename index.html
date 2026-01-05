@@ -1,1187 +1,304 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="google-site-verification" content="u45GKsSGj_hQuPwxFDKOQL6gjWer7B8HUfLEk5VD9Ls" />
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lucky Wheel Spinner</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FormatForge | Precision Image Converter</title>
     <style>
-        /* Custom Keyframes and Styles */
-        @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap');
-
-        body { font-family: 'Segoe UI', Arial, sans-serif; }
-
-        /* Scrollbar styling */
-        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.3); border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, 0.5); }
-
-        /* Animations */
-        @keyframes confetti {
-            0% { transform: translateY(0) rotateZ(0deg) scale(1); opacity: 1; }
-            100% { transform: translateY(100vh) rotateZ(1080deg) scale(0.5); opacity: 0; }
-        }
-        .animate-confetti { animation: confetti linear forwards; }
-
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 30px rgba(251, 191, 36, 0.6), 0 0 60px rgba(251, 191, 36, 0.3); transform: scale(1); }
-            50% { box-shadow: 0 0 50px rgba(251, 191, 36, 0.8), 0 0 90px rgba(251, 191, 36, 0.5); transform: scale(1.02); }
-        }
-        .winner-glow { animation: pulse-glow 1.5s ease-in-out infinite; }
-
-        @keyframes bounce-in {
-            0% { transform: scale(0) rotate(-180deg); opacity: 0; }
-            50% { transform: scale(1.1) rotate(10deg); }
-            100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-        .bounce-in { animation: bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
-
-        @keyframes shimmer {
-            0% { background-position: -1000px 0; }
-            100% { background-position: 1000px 0; }
-        }
-        .shimmer {
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            background-size: 1000px 100%;
-            animation: shimmer 2s infinite;
+        :root {
+            --primary: #f59e0b; /* Amber/Forge Orange */
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --accent: #fbbf24;
+            --border: #334155;
+            --success: #10b981;
         }
 
-        .hidden { display: none !important; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: var(--card);
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            width: 100%;
+            max-width: 550px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        h1 { 
+            margin: 0; 
+            font-size: 2rem; 
+            letter-spacing: -1px;
+            background: linear-gradient(to right, #f59e0b, #fbbf24);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
         
-        #pointer { transform-origin: top center; }
+        p.subtitle { color: #94a3b8; font-size: 0.9rem; margin-bottom: 25px; margin-top: 5px; }
+
+        /* Upload Area */
+        .upload-box {
+            border: 2px dashed #475569;
+            padding: 40px 20px;
+            border-radius: 16px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s ease;
+            background: #151e2e;
+            margin-bottom: 20px;
+        }
+        .upload-box:hover { border-color: var(--primary); background: #1e293b; }
+        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+        /* Editor Section */
+        #editor { display: none; animation: fadeIn 0.4s ease forwards; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .preview-wrapper {
+            background: #000;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            line-height: 0;
+        }
+        #previewImg { max-width: 100%; max-height: 300px; object-fit: contain; transition: transform 0.3s ease; }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            text-align: left;
+            margin-bottom: 20px;
+        }
+
+        label { font-size: 0.75rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; margin-bottom: 5px; display: block; }
+        
+        select, input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            background: #0f172a;
+            border: 1px solid var(--border);
+            color: white;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+
+        .tool-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tool-btn {
+            flex: 1;
+            background: #334155;
+            border: none;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: background 0.2s;
+        }
+        .tool-btn:hover { background: #475569; }
+
+        .download-section {
+            background: #2d3a4f;
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .btn-forge {
+            background: var(--primary);
+            color: #451a03;
+            width: 100%;
+            border: none;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: 800;
+            font-size: 1rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 10px;
+        }
+        .btn-forge:hover { background: var(--accent); }
     </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-800 to-pink-700 p-4 md:p-8">
+<body>
 
-    <div id="confetti-container" class="fixed inset-0 pointer-events-none z-50 overflow-hidden hidden"></div>
+<div class="container">
+    <h1>FormatForge</h1>
+    <p class="subtitle">The Hardcore Image Transmuter</p>
 
-    <div class="max-w-7xl mx-auto relative">
-        
-        <button id="soundBtn" class="absolute top-16 right-2 md:right-4 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-3 rounded-full transition-all shadow-lg z-50" title="Toggle Sound">
-            <svg id="soundIconOn" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-        </button>
-
-        <div class="text-center mb-8 pt-2">
-            <h1 class="text-5xl md:text-6xl font-bold text-white mb-3 drop-shadow-2xl tracking-tight">
-                🎰 Lucky Wheel Spinner
-            </h1>
-            <p class="text-xl text-purple-200 font-medium">Spin to Win!</p>
-        </div>
-
-        <div class="grid lg:grid-cols-3 gap-6">
-            
-            <div class="lg:col-span-2 bg-white/95 backdrop-blur-sm rounded-3xl shadow-[0_35px_60px_-15px_rgba(0,0,0,0.6)] p-6 md:p-10 border border-white/20">
-                <div class="relative mb-8">
-                    <div id="pointer" class="absolute left-1/2 -translate-x-1/2 -top-8 z-20" 
-                         style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)); transform-origin: 50% 15px;">
-                        <svg width="60" height="90" viewBox="0 0 60 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="30" cy="15" r="12" fill="#E2E8F0" stroke="#475569" stroke-width="3"/>
-                            <circle cx="30" cy="15" r="4" fill="#1E293B"/>
-                            <path d="M30 15 L50 25 L30 85 L10 25 L30 15 Z" fill="#DC2626" stroke="#991B1B" stroke-width="2"/>
-                            <path d="M30 15 L40 25 L30 75 L30 15 Z" fill="rgba(255,255,255,0.4)"/>
-                        </svg>
-                    </div>
-
-                    <div class="relative">
-                        <canvas id="wheelCanvas" width="500" height="500" class="w-full max-w-lg mx-auto drop-shadow-[0_20px_20px_rgba(0,0,0,0.6)]"></canvas>
-                    </div>
-                </div>
-
-                <div class="flex gap-4 justify-center flex-wrap">
-                    <button id="spinBtn" class="bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 text-white px-10 py-5 rounded-2xl font-bold text-xl hover:scale-105 active:scale-95 transition-all shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex items-center gap-3 relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed">
-                        <div class="absolute inset-0 shimmer opacity-0 group-hover:opacity-100"></div>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="relative z-10"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                        <span id="spinBtnText" class="relative z-10">SPIN NOW</span>
-                    </button>
-
-                    <button id="resetBtn" class="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-8 py-5 rounded-2xl font-bold text-lg hover:scale-105 active:scale-95 transition-all shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex items-center gap-2 disabled:opacity-50">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74-2.74L3 12"></path><path d="M3 5v7h7"></path></svg>
-                        <span>Reset</span>
-                    </button>
-                </div>
-
-                <div id="winnerDisplay" class="mt-8 bg-gradient-to-r from-yellow-400 via-amber-400 to-orange-500 rounded-3xl p-8 text-center winner-glow bounce-in relative overflow-hidden hidden shadow-2xl">
-                    <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent shimmer"></div>
-                    <div class="flex items-center justify-center gap-3 mb-3 relative z-10">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white drop-shadow"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>
-                        <h3 class="text-4xl font-black text-white drop-shadow-lg">WINNER!</h3>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white drop-shadow"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>
-                    </div>
-                    <div class="bg-white/30 backdrop-blur-sm rounded-2xl p-6 relative z-10">
-                        <p id="winnerText" class="text-5xl font-black text-white drop-shadow-lg tracking-wide"></p>
-                    </div>
-                    <div class="mt-4 flex items-center justify-center gap-2 relative z-10">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white animate-pulse"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L12 3Z"></path><path d="M5 3v4"></path><path d="M9 3v4"></path><path d="M3 5h4"></path><path d="M3 9h4"></path></svg>
-                        <p class="text-white font-bold text-lg">Congratulations! 🎉</p>
-                    </div>
-                </div>
-            </div>
-<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Pacifico&family=Press+Start+2P&family=Permanent+Marker&display=swap" rel="stylesheet">
-            <div class="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-6 md:p-8">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                        Participants
-                    </h2>
-                    <div class="flex items-center gap-3">
-                        <button id="shuffleBtn" class="bg-gradient-to-r from-blue-500 to-indigo-500 text-white p-3 rounded-xl font-semibold hover:scale-110 active:scale-95 transition-transform shadow-lg disabled:opacity-50 disabled:cursor-not-allowed" title="Shuffle Names">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"></path><path d="M4 20L21 3"></path><path d="M21 16v5h-5"></path><path d="M15 15l6 6"></path><path d="M4 4l5 5"></path></svg>
-                        </button>
-                        
-                        <span id="participantCount" class="bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 px-4 py-2 rounded-full font-bold text-sm">
-                            2/16
-                        </span>
-                        
-                        <button id="addNameBtn" class="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-3 rounded-xl font-semibold hover:scale-110 active:scale-95 transition-transform shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
-                        </button>
-                    </div>
-                </div>
-
-                <div id="namesList" class="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar"></div>
-
-                <div id="maxWarning" class="mt-4 bg-orange-100 border-2 border-orange-400 rounded-xl p-3 text-center hidden">
-                    <p class="text-sm text-orange-700 font-bold">⚠️ Maximum participants reached</p>
-                </div>
-            </div>
-        </div>
+    <div class="upload-box" id="dropZone">
+        <div style="font-size: 3rem; margin-bottom: 10px;">⚒️</div>
+        <span style="font-weight: bold; color: #cbd5e1;">Drop Image or Click to Forge</span>
+        <input type="file" id="fileInput" accept="image/*">
     </div>
 
-    <script>
-        // State Variables
-        let names = ['Alice', 'Bob'];
-        let editingIndex = null;
-        let isSpinning = false;
-        let rotation = 0;
-        let winner = null;
-        let highlightedIndex = null;
-        let pointerAngle = 0;
-        let lastTick = 0;
-        let soundEnabled = true;
+    <div id="editor">
+        <div class="preview-wrapper">
+            <img id="previewImg" src="" alt="Forge Preview">
+        </div>
 
-        const colors = [
-            '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A',
-            '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
-            '#F8B88B', '#A8E6CF', '#FFD3B6', '#FFAAA5',
-            '#FF8B94', '#A8D8EA', '#F3B0C3', '#C7CEEA'
-        ];
+        <div class="tool-bar">
+            <button class="tool-btn" onclick="rotate(-90)" title="Rotate Left">↺</button>
+            <button class="tool-btn" onclick="rotate(90)" title="Rotate Right">↻</button>
+            <button class="tool-btn" onclick="flip('h')" title="Flip Horizontal">⇄</button>
+            <button class="tool-btn" onclick="flip('v')" title="Flip Vertical">⇅</button>
+        </div>
 
-        // --- AUDIO SYSTEM ---
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        const audioCtx = new AudioContext();
-
-        function playTickSound() {
-            if (!soundEnabled || audioCtx.state === 'suspended') {
-                if(soundEnabled) audioCtx.resume();
-                else return;
-            }
-            const osc = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            osc.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
-            gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.1);
-        }
-
-        function playWinSound() {
-            if (!soundEnabled || audioCtx.state === 'suspended') {
-                if(soundEnabled) audioCtx.resume();
-                else return;
-            }
-            const notes = [523.25, 659.25, 783.99, 1046.50];
-            notes.forEach((freq, i) => {
-                const osc = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
-                osc.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                osc.frequency.value = freq;
-                osc.type = 'sine';
-                const startTime = audioCtx.currentTime + (i * 0.1);
-                gainNode.gain.setValueAtTime(0, startTime);
-                gainNode.gain.linearRampToValueAtTime(0.2, startTime + 0.1);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 1.2);
-                osc.start(startTime);
-                osc.stop(startTime + 1.2);
-            });
-        }
-
-        // DOM Elements
-        const canvas = document.getElementById('wheelCanvas');
-        const ctx = canvas.getContext('2d');
-        const spinBtn = document.getElementById('spinBtn');
-        const spinBtnText = document.getElementById('spinBtnText');
-        const resetBtn = document.getElementById('resetBtn');
-        const addNameBtn = document.getElementById('addNameBtn');
-        const shuffleBtn = document.getElementById('shuffleBtn');
-        const namesList = document.getElementById('namesList');
-        const participantCount = document.getElementById('participantCount');
-        const maxWarning = document.getElementById('maxWarning');
-        const winnerDisplay = document.getElementById('winnerDisplay');
-        const winnerText = document.getElementById('winnerText');
-        const confettiContainer = document.getElementById('confetti-container');
-        const pointer = document.getElementById('pointer');
-        const soundBtn = document.getElementById('soundBtn');
-
-        // Sound Toggle
-        soundBtn.onclick = () => {
-            soundEnabled = !soundEnabled;
-            if (soundEnabled) {
-                soundBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
-                soundBtn.classList.replace('bg-red-500', 'bg-white/20');
-            } else {
-                soundBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`;
-                soundBtn.classList.replace('bg-white/20', 'bg-red-500');
-            }
-        };
-
-        const adjustBrightness = (color, amount) => {
-            const num = parseInt(color.replace('#', ''), 16);
-            const r = Math.max(0, Math.min(255, (num >> 16) + amount));
-            const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amount));
-            const b = Math.max(0, Math.min(255, (num & 0x0000FF) + amount));
-            return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
-        };
-
-const drawStar = (ctx, cx, cy, spikes, outerRadius, innerRadius, color) => {
-    let rot = Math.PI / 2 * 3;
-    let x = cx;
-    let y = cy;
-    const step = Math.PI / spikes;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - outerRadius);
-    for (let i = 0; i < spikes; i++) {
-        x = cx + Math.cos(rot) * outerRadius;
-        y = cy + Math.sin(rot) * outerRadius;
-        ctx.lineTo(x, y);
-        rot += step;
-        x = cx + Math.cos(rot) * innerRadius;
-        y = cy + Math.sin(rot) * innerRadius;
-        ctx.lineTo(x, y);
-        rot += step;
-    }
-    ctx.lineTo(cx, cy - outerRadius);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-};
-
-const drawWheel = () => {
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = Math.min(centerX, centerY) - 15;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const anglePerSegment = (Math.PI * 2) / names.length;
-
-    names.forEach((name, index) => {
-        const startAngle = index * anglePerSegment + (rotation * Math.PI / 180);
-        const endAngle = startAngle + anglePerSegment;
-
-        ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        ctx.arc(centerX, centerY, radius, startAngle, endAngle);
-        ctx.closePath();
-
-        const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
-        gradient.addColorStop(0, colors[index % colors.length]);
-        gradient.addColorStop(1, adjustBrightness(colors[index % colors.length], -20));
-        ctx.fillStyle = gradient;
-        ctx.fill();
-
-        // Keep inner segment borders relatively thin
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2; 
-        ctx.stroke();
-
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate(startAngle + anglePerSegment / 2);
-        ctx.textAlign = 'center'; 
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#fff';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-        ctx.shadowBlur = 6;
-        const fontSize = Math.max(14, Math.min(48, 55 - (name.length * 4)));
-        ctx.font = `bold ${fontSize}px 'Segoe UI', Arial, sans-serif`;
-        ctx.fillText(name, (radius / 2) + 20, 0);
-        ctx.restore();
-    });
-
-    // --- 1. HUB DEPTH & CONTRAST ---
-    const hubRadius = 25;
-    const centerGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, hubRadius);
-    centerGradient.addColorStop(0, '#6355F2');   
-    centerGradient.addColorStop(0.6, '#2C1A7D'); 
-    centerGradient.addColorStop(1, '#08041A');   
-
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, hubRadius, 0, Math.PI * 2);
-    ctx.fillStyle = centerGradient;
-    ctx.fill();
-
-    // --- 2. THE MAIN HUB GOLD BORDER ---
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth = 5; 
-    ctx.stroke();
-
-    // --- 3. TWO PROMINENT RINGS (1 GOLD INNER + 1 WHITE OUTER) ---
-    const ringSettings = [
-        { r: 34, color: '#FFD700' }, 
-        { r: 46, color: '#FFFFFF' }  
-    ];
-
-    ringSettings.forEach(ring => {
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, ring.r, 0, Math.PI * 2);
-        ctx.strokeStyle = ring.color;
-        ctx.lineWidth = 4.5;       
-        ctx.globalAlpha = 0.9;     
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;     
-    });
-
-    // --- 4. THE CENTER STAR ---
-    drawStar(ctx, centerX, centerY, 5, 12, 6, '#FFD700');
-
-    // --- 5. THE OUTER WHITE BOUNDARY WITH STRONG PURPLE GLOW ---
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-
-    // UPDATED: White line is now "a little thick" (increased from 2.5 to 4)
-    ctx.strokeStyle = '#FFFFFF'; 
-    ctx.lineWidth = 4; 
-
-    // UPDATED: Purple glow is much stronger now (blur increased from 20 to 35)
-    ctx.shadowColor = '#A78BFA'; 
-    ctx.shadowBlur = 35;         
-    
-    ctx.stroke(); // Draws the solid white line with the strong purple halo around it
-    ctx.restore();
-};
-
-        const renderNames = () => {
-            namesList.innerHTML = '';
-            participantCount.textContent = `${names.length}/16`;
-
-            names.forEach((name, index) => {
-                const item = document.createElement('div');
-                const isHighlighted = highlightedIndex === index;
-                const isEditing = editingIndex === index;
- // (Picking up right after: const isEditing = editingIndex === index;)
-                
-                let className = "flex items-center gap-3 p-3 rounded-2xl border-2 transition-all duration-300 min-h-[72px] box-border ";
-                if (isHighlighted) className += "bg-gradient-to-r from-yellow-100 to-amber-100 border-yellow-400 shadow-lg scale-105 ";
-                else className += "bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200 hover:border-purple-300 ";
-                
-                item.className = className;
-                item.style.borderLeftWidth = '6px';
-                item.style.borderLeftColor = colors[index % colors.length];
-
-                const badge = document.createElement('div');
-                badge.className = "w-10 h-10 flex-shrink-0 rounded-xl flex items-center justify-center text-white font-bold shadow-md text-lg";
-                badge.style.backgroundColor = colors[index % colors.length];
-                badge.textContent = index + 1;
-                item.appendChild(badge);
-
-                if (isEditing) {
-                    const input = document.createElement('input');
-                    input.type = 'text';
-                    input.value = name;
-                    input.className = "flex-1 w-full px-2 py-1 border-2 border-purple-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 font-semibold text-lg bg-white";
-                    input.maxLength = 20; 
-                    const save = () => {
-                        const val = input.value.trim();
-                        if (val) names[index] = val;
-                        editingIndex = null;
-                        renderNames();
-                        drawWheel();
-                    };
-                    input.onkeypress = (e) => { if(e.key === 'Enter') save(); };
-                    item.appendChild(input);
-                    setTimeout(() => input.focus(), 0);
-                } else {
-                    const span = document.createElement('span');
-                    span.className = "flex-1 font-bold text-gray-800 text-lg truncate";
-                    span.textContent = name;
-                    item.appendChild(span);
-                }
-
-                const actionBtn = document.createElement('button');
-                if (isEditing) {
-                    actionBtn.className = "p-2 hover:bg-green-100 rounded-xl transition-colors text-green-600";
-                    actionBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-                    actionBtn.onclick = () => {
-                        const input = item.querySelector('input');
-                        if (input && input.value.trim()) names[index] = input.value.trim();
-                        editingIndex = null;
-                        renderNames();
-                        drawWheel();
-                    };
-                } else {
-                    actionBtn.className = "p-2 hover:bg-blue-100 rounded-xl transition-colors text-blue-600";
-                    actionBtn.disabled = editingIndex !== null || isSpinning;
-                    actionBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`;
-                    actionBtn.onclick = () => { editingIndex = index; renderNames(); };
-                }
-                item.appendChild(actionBtn);
-
-                const removeBtn = document.createElement('button');
-                removeBtn.className = "p-2 hover:bg-red-100 rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed";
-                
-                // FIXED: Button disables if only 2 names are left
-                removeBtn.disabled = names.length <= 2 || isEditing || isSpinning;
-                
-                removeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-600"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
-                
-                removeBtn.onclick = () => {
-                    // Safety check: only remove if list will still have at least 2 names
-                    if (names.length > 2) {
-                        names.splice(index, 1);
-                        if (winner === name) { winner = null; winnerDisplay.classList.add('hidden'); }
-                        drawWheel();
-                        renderNames();
-                    }
-                };
-                item.appendChild(removeBtn);
-                namesList.appendChild(item);
-            });
-
-            // UI State updates
-            addNameBtn.disabled = names.length >= 16 || isSpinning || editingIndex !== null;
-            spinBtn.disabled = isSpinning || names.length === 0 || editingIndex !== null;
-            resetBtn.disabled = isSpinning;
-            shuffleBtn.disabled = isSpinning || names.length < 2 || editingIndex !== null;
-
-            if(names.length >= 16) maxWarning.classList.remove('hidden');
-            else maxWarning.classList.add('hidden');
-        };
-
-        const showConfetti = () => {
-            confettiContainer.innerHTML = '';
-            confettiContainer.classList.remove('hidden');
-            for (let i = 0; i < 80; i++) {
-                const p = document.createElement('div');
-                p.className = 'absolute animate-confetti rounded-full';
-                const size = 8 + Math.random() * 8;
-                p.style.width = `${size}px`;
-                p.style.height = `${size}px`;
-                p.style.left = `${Math.random() * 100}%`;
-                p.style.top = '-20px';
-                p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-                p.style.animationDelay = `${Math.random() * 0.8}s`;
-                p.style.animationDuration = `${2 + Math.random() * 1.5}s`;
-                confettiContainer.appendChild(p);
-            }
-            setTimeout(() => { confettiContainer.classList.add('hidden'); }, 4000);
-        };
-
-        const updateHighlight = () => {
-            if (isSpinning || winner) {
-                const anglePerSegment = 360 / names.length;
-                const adjustedRotation = (360 - (rotation % 360) + 270) % 360;
-                const currentIndex = Math.floor(adjustedRotation / anglePerSegment) % names.length;
-                if (highlightedIndex !== currentIndex) { highlightedIndex = currentIndex; renderNames(); }
-            }
-        };
-
-        const updatePointer = (velocity) => {
-            if (velocity > 0) {
-                 pointerAngle *= 0.9; 
-                 if (Math.random() < velocity * 0.1) pointerAngle = -25 * Math.min(velocity, 0.5);
-            } else { pointerAngle *= 0.8; }
-            pointer.style.transform = `translateX(-50%) rotate(${pointerAngle}deg)`;
-        };
-
-const handleSpin = () => {
-            if (isSpinning || names.length === 0) return;
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-
-            isSpinning = true;
-            winner = null;
-            winnerDisplay.classList.add('hidden');
-            renderNames(); 
-            spinBtnText.textContent = 'Spinning...';
-
-            const spins = 10 + Math.random() * 5; 
-            const totalRotation = spins * 360 + Math.random() * 360;
-            const duration = 8000; 
-            const startTime = Date.now();
-            const startRotation = rotation;
-            let lastRotation = startRotation;
-
-            const animate = () => {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const easeOut = progress < 0.7 ? Math.pow(progress / 0.7, 2) * 0.9 : 0.9 + (1 - Math.pow((1 - progress) / 0.3, 3)) * 0.1;
-                const targetRot = startRotation + totalRotation * easeOut;
-                
-                rotation = targetRot % 360;
-                const anglePerSegment = 360 / names.length;
-                const ticksPassed = Math.floor(targetRot / anglePerSegment);
-                
-                if (ticksPassed !== lastTick) {
-                    pointerAngle = -45; 
-                    lastTick = ticksPassed;
-                    playTickSound();
-                }
-                
-                pointerAngle *= 0.85;
-                pointer.style.transform = `translateX(-50%) rotate(${pointerAngle}deg)`;
-
-                drawWheel();
-                updateHighlight();
-                updatePointer(targetRot - lastRotation); 
-                lastRotation = targetRot;
-
-                if (progress < 1) requestAnimationFrame(animate);
-                else {
-                    isSpinning = false;
-                    pointerAngle = 0;
-                    pointer.style.transform = `translateX(-50%) rotate(0deg)`;
-                    spinBtnText.textContent = 'SPIN NOW';
-                    calculateWinner(rotation);
-                    renderNames(); 
-                }
-            };
-            animate();
-        };
-
-        const calculateWinner = (finalRotation) => {
-            const anglePerSegment = 360 / names.length;
-            const adjustedRotation = (360 - (finalRotation % 360) + 270) % 360;
-            const winnerIndex = Math.floor(adjustedRotation / anglePerSegment) % names.length;
-            setTimeout(() => {
-                playWinSound();
-                winner = names[winnerIndex];
-                winnerText.textContent = winner;
-                winnerDisplay.classList.remove('hidden');
-                showConfetti();
-                highlightedIndex = winnerIndex;
-                renderNames();
-            }, 500);
-        };
-const shuffleNames = () => {
-            if (isSpinning || names.length < 2) return;
-
-            // Store the order before we start to compare
-            let originalOrder = [...names];
-            let isFullyMixed = false;
-            let attempts = 0;
-
-            // Keep shuffling until EVERY name has moved to a new spot
-            // (Maximum 10 attempts to prevent any infinite loops)
-            while (!isFullyMixed && attempts < 10) {
-                for (let i = names.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [names[i], names[j]] = [names[j], names[i]];
-                }
-
-                // Logic check: Is there anyone still in their original index?
-                isFullyMixed = names.every((name, index) => {
-                    // This works for both simple names and the new Font Objects we discussed
-                    const oldVal = typeof originalOrder[index] === 'object' ? originalOrder[index].text : originalOrder[index];
-                    const newVal = typeof names[index] === 'object' ? names[index].text : names[index];
-                    return oldVal !== newVal;
-                });
-                attempts++;
-            }
-
-            // Reset winner and refresh UI
-            winner = null;
-            highlightedIndex = null;
-            winnerDisplay.classList.add('hidden');
-            drawWheel();
-            renderNames();
-
-            // VISUAL FEEDBACK: Makes every name pulse and jiggle
-            const allItems = namesList.querySelectorAll('div');
-            allItems.forEach((item) => {
-                item.style.transform = "scale(1.1) rotate(2deg)";
-                item.style.transition = "transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
-                setTimeout(() => {
-                    item.style.transform = "scale(1) rotate(0deg)";
-                }, 250);
-            });
-
-            if (soundEnabled) playTickSound();
-        };
-
-        resetBtn.onclick = () => {
-            rotation = 0; winner = null; highlightedIndex = null;
-            winnerDisplay.classList.add('hidden');
-            drawWheel(); renderNames();
-        };
-
-        addNameBtn.onclick = () => {
-            if (names.length < 16) {
-                names.push(`Player ${names.length + 1}`);
-                drawWheel(); renderNames();
-            }
-        };
-
-        shuffleBtn.onclick = shuffleNames;
-        spinBtn.onclick = handleSpin;
-
-        window.onload = () => { drawWheel(); renderNames(); };
-    
-    </script>
-    
-</body>
-</html>
-    <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Alfa+Slab+One&family=Amatic+SC:wght@700&family=Anton&family=Bangers&family=Bungee&family=Butcherman&family=Cinzel:wght@700&family=Comfortaa:wght@700&family=Creepster&family=Dancing+Script:wght@700&family=Fascinate+Inline&family=Fredoka+One&family=Great+Vibes&family=Indie+Flower&family=Kaushan+Script&family=Lobster&family=Monoton&family=Orbitron:wght@700&family=Oswald:wght@700&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:wght@900&family=Press+Start+2P&family=Righteous&family=Roboto+Mono:wght@700&family=Russo+One&family=Shadows+Into+Light&family=Special+Elite&family=Spirax&family=Tangerine:wght@700&family=Ultra&family=VT323&family=Zilla+Slab+Highlight:wght@700&display=swap" rel="stylesheet">
-
-<script>
-    window.selectedFont = "'Segoe UI', Arial, sans-serif";
-    const fontStyleSheet = document.createElement('style');
-    document.head.appendChild(fontStyleSheet);
-
-    // 1. CANVAS HACK
-    const originalCtxFont = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'font');
-    Object.defineProperty(CanvasRenderingContext2D.prototype, 'font', {
-        set: function(value) {
-            if (value.includes("'Segoe UI'") || value.includes("Arial") || value.includes("sans-serif")) {
-                const sizePart = value.split('px')[0]; 
-                originalCtxFont.set.call(this, sizePart + 'px ' + window.selectedFont);
-            } else {
-                originalCtxFont.set.call(this, value);
-            }
-        },
-        get: function() { return originalCtxFont.get.call(this); }
-    });
-
-    // 2. STYLES
-    function updateNamesFont() {
-        fontStyleSheet.innerHTML = `
-            #winnerText, #namesList span.truncate { 
-                font-family: ${window.selectedFont} !important;
-                line-height: 1.2 !important;
-            }
-            .font-opt-item { transition: all 0.2s; border: 1px solid transparent; }
-            .font-opt-item:hover {
-                background: linear-gradient(90deg, rgba(99, 102, 241, 0.3), rgba(236, 72, 153, 0.3)) !important;
-                border-color: rgba(255, 255, 255, 0.2);
-                padding-left: 20px !important;
-            }
-            .font-opt-active { background: linear-gradient(90deg, #6366f1, #ec4899) !important; color: white !important; }
-            .custom-scrollbar-mini::-webkit-scrollbar { width: 5px; }
-            .custom-scrollbar-mini::-webkit-scrollbar-thumb { background: #a855f7; border-radius: 10px; }
-            .font-cat-header {
-                color: #f472b6; font-size: 9px; font-weight: 900; 
-                padding: 10px 10px 5px; text-transform: uppercase; letter-spacing: 1px;
-                border-top: 1px solid rgba(255,255,255,0.1); margin-top: 5px;
-            }
-        `;
-    }
-
-    // 3. UI STRUCTURE
-    const stylePanel = document.createElement('div');
-    stylePanel.style.cssText = `margin-bottom: 20px; padding: 2px; background: linear-gradient(45deg, #6366f1, #a855f7, #ec4899); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.4); position: relative; z-index: 50;`;
-
-    stylePanel.innerHTML = `
-        <div style="background: rgba(15, 10, 40, 0.85); backdrop-filter: blur(15px); padding: 14px; border-radius: 18px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <label style="color: #ddd6fe; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; font-family: sans-serif;">
-                    🎨 Mega Font Collection
-                </label>
+        <div class="controls-grid">
+            <div>
+                <label>Target Format</label>
+                <select id="formatSelect">
+                    <option value="image/png">PNG (Lossless)</option>
+                    <option value="image/jpeg">JPEG (Compressed)</option>
+                    <option value="image/webp">WebP (Modern)</option>
+                </select>
             </div>
-            
-            <div id="customSelectTrigger" style="
-                width: 100%; padding: 14px; border-radius: 14px; 
-                background: rgba(255, 255, 255, 0.05); color: #fff; 
-                border: 1px solid rgba(255, 255, 255, 0.1); 
-                cursor: pointer; display: flex; justify-content: space-between; align-items: center;
-                font-weight: 600; font-size: 15px; transition: 0.3s;
-            ">
-                <span id="selectedFontDisplay">Segoe UI (Default)</span>
-                <svg id="arrowIcon" style="transition: 0.3s;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg>
+            <div>
+                <label>Quality</label>
+                <select id="qualitySelect">
+                    <option value="1.0">100% (Best)</option>
+                    <option value="0.9" selected>90% (High)</option>
+                    <option value="0.7">70% (Medium)</option>
+                    <option value="0.5">50% (Low)</option>
+                </select>
             </div>
-
-            <div id="customOptionsList" class="custom-scrollbar-mini" style="
-                display: none; position: absolute; left: 0; right: 0; 
-                background: rgba(10, 5, 25, 0.98); backdrop-filter: blur(25px);
-                border-radius: 18px; border: 1px solid rgba(168, 85, 247, 0.4);
-                z-index: 99999; max-height: 350px; overflow-y: auto; padding: 10px;
-                box-shadow: 0 25px 60px rgba(0,0,0,0.8);
-            ">
-                <div style="color: #f472b6; font-size: 9px; font-weight: 900; padding: 10px; text-transform: uppercase;">Standard & Clean</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: sans-serif;" data-value="'Segoe UI', sans-serif">Segoe UI</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Roboto Mono', monospace;" data-value="'Roboto Mono', monospace">Roboto Mono</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Oswald', sans-serif;" data-value="'Oswald', sans-serif">Oswald Condensed</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Comfortaa', cursive;" data-value="'Comfortaa', cursive">Comfortaa Round</div>
-
-                <div class="font-cat-header">Bold & Comic</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Impact', sans-serif;" data-value="'Impact', sans-serif">Impact Bold</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Bangers', cursive; letter-spacing: 1px;" data-value="'Bangers', cursive">Bangers Comic</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Fredoka One', cursive;" data-value="'Fredoka One', cursive">Fredoka Soft</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Alfa Slab One', cursive;" data-value="'Alfa Slab One', cursive">Alfa Heavy</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Ultra', serif;" data-value="'Ultra', serif">Ultra Fat</div>
-
-                <div class="font-cat-header">Gaming & Future</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Orbitron', sans-serif;" data-value="'Orbitron', sans-serif">Orbitron Space</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Press Start 2P', cursive; font-size: 10px;" data-value="'Press Start 2P', cursive">Pixel Arcade</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Russo One', sans-serif;" data-value="'Russo One', sans-serif">Russo Strong</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Monoton', cursive;" data-value="'Monoton', cursive">Neon Lines</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'VT323', monospace; font-size: 20px;" data-value="'VT323', monospace">Terminal Hacker</div>
-
-                <div class="font-cat-header">Handwritten & Sketch</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Indie Flower', cursive;" data-value="'Indie Flower', cursive">Indie Flower</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Shadows Into Light', cursive;" data-value="'Shadows Into Light', cursive">Marker Notes</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Amatic SC', cursive; font-weight: bold; font-size: 18px;" data-value="'Amatic SC', cursive">Amatic Skinny</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Kaushan Script', cursive;" data-value="'Kaushan Script', cursive">Brush Stroke</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Permanent Marker', cursive;" data-value="'Permanent Marker', cursive">Permanent Marker</div>
-
-                <div class="font-cat-header">Fancy & Script</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Great Vibes', cursive; font-size: 22px;" data-value="'Great Vibes', cursive">Great Vibes</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Dancing Script', cursive;" data-value="'Dancing Script', cursive">Dancing Script</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Pacifico', cursive;" data-value="'Pacifico', cursive">Pacifico</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Lobster', cursive;" data-value="'Lobster', cursive">Lobster</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Tangerine', cursive; font-size: 24px;" data-value="'Tangerine', cursive">Tangerine Calligraphy</div>
-
-                <div class="font-cat-header">Vintage & Retro</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Rye', serif;" data-value="'Rye', serif">Western Wanted</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Fascinate Inline', cursive;" data-value="'Fascinate Inline', cursive">Broadway Deco</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Special Elite', cursive;" data-value="'Special Elite', cursive">Old Typewriter</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Abril Fatface', cursive;" data-value="'Abril Fatface', cursive">Vogue Magazine</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Cinzel', serif;" data-value="'Cinzel', serif">Cinzel Roman</div>
-
-                <div class="font-cat-header">Horror & Edgy</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Creepster', cursive; letter-spacing: 1px;" data-value="'Creepster', cursive">Creepster Horror</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Butcherman', cursive;" data-value="'Butcherman', cursive">Butcherman</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Zilla Slab Highlight', serif;" data-value="'Zilla Slab Highlight', serif">Glitch Style</div>
-                <div class="font-opt-item" style="padding: 12px; cursor: pointer; color: #fff; font-family: 'Spirax', cursive;" data-value="'Spirax', cursive">Witchcraft</div>
+            <div>
+                <label>Width (px)</label>
+                <input type="number" id="inputWidth">
+            </div>
+            <div>
+                <label>Height (px)</label>
+                <input type="number" id="inputHeight">
             </div>
         </div>
-    `;
 
-const namesListElement = document.getElementById('namesList');
-    if (namesListElement) namesListElement.parentNode.insertBefore(stylePanel, namesListElement);
-
-    // 4. SMART LOGIC (Kept exactly as requested)
-    const trigger = document.getElementById('customSelectTrigger');
-    const list = document.getElementById('customOptionsList');
-    const arrow = document.getElementById('arrowIcon');
-    const display = document.getElementById('selectedFontDisplay');
-
-    trigger.onclick = (e) => {
-        e.stopPropagation();
-        if (list.style.display === 'block') {
-            list.style.display = 'none';
-            arrow.style.transform = 'rotate(0deg)';
-            return;
-        }
-        const rect = trigger.getBoundingClientRect();
-        const spaceBelow = window.innerHeight - rect.bottom;
-        const menuHeight = 320;
-
-        if (spaceBelow < menuHeight) {
-            list.style.bottom = '105%'; list.style.top = 'auto'; list.style.transformOrigin = 'bottom center';
-        } else {
-            list.style.top = '105%'; list.style.bottom = 'auto'; list.style.transformOrigin = 'top center';
-        }
-        list.style.display = 'block';
-        arrow.style.transform = 'rotate(180deg)';
-    };
-
-    window.onclick = () => { list.style.display = 'none'; arrow.style.transform = 'rotate(0deg)'; };
-
-    document.querySelectorAll('.font-opt-item').forEach(item => {
-        item.onclick = function() {
-            const val = this.getAttribute('data-value');
-            const name = this.innerText;
-            document.querySelectorAll('.font-opt-item').forEach(i => i.classList.remove('font-opt-active'));
-            this.classList.add('font-opt-active');
-            window.selectedFont = val;
-            display.innerText = name;
-            display.style.fontFamily = val;
-            updateNamesFont();
-            if (typeof drawWheel === 'function') {
-                drawWheel();
-                setTimeout(drawWheel, 50);
-            }
-        };
-    });
-
-    updateNamesFont();
-</script>
-<script>
-    (function() {
-        // 1. STATE & VARS
-        window.wheelImageObj = null;
-        window.wheelPhotoActive = false;
-        let isMenuOpen = false;
-
-        // 2. LIGHT GLASS MODAL (Theme Preserved)
-        const modalOverlay = document.createElement('div');
-        modalOverlay.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px);
-            z-index: 99999; display: flex; align-items: center; justify-content: center;
-            opacity: 0; pointer-events: none; transition: opacity 0.3s;
-        `;
-        
-        const modalBox = document.createElement('div');
-        modalBox.style.cssText = `
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(20px) saturate(180%);
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
-            padding: 25px; border-radius: 24px; text-align: center;
-            width: 300px; transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            color: #1f2937;
-        `;
-
-        // --- UPGRADED SVG ICONS (Bold, Filled Style) ---
-        const iconTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 4h-3.5l-1-1h-5l-1 1H5v2h14zM6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12z"/></svg>`;
-        const iconSwap = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8.009 8.009 0 0 1-8 8z"/><path d="M16.293 8.293 13 11.586V6h-2v5.586l-3.293-3.293-1.414 1.414 5 5a1 1 0 0 0 1.414 0l5-5z"/><path d="M7.707 15.707 11 12.414V18h2v-5.586l3.293 3.293 1.414-1.414-5-5a1 1 0 0 0-1.414 0l-5 5z"/></svg>`;
-        // ----------------------------------------------
-
-        modalBox.innerHTML = `
-            <div style="font-size: 30px; margin-bottom: 15px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));">🎨</div>
-            <h3 style="margin: 0 0 5px 0; font-family: sans-serif; font-weight: 800; font-size: 18px;">Manage Layer</h3>
-            <p style="color: #6b7280; font-size: 13px; margin: 0 0 25px 0; font-family: sans-serif;">Select an action for this image</p>
-            
-            <div style="display: flex; gap: 12px; margin-bottom: 15px;">
-                <button id="modalRemove" style="
-                    flex: 1; padding: 14px; border-radius: 16px; border: none; cursor: pointer;
-                    background: #fee2e2; color: #dc2626; font-weight: 700;
-                    transition: 0.2s; display: flex; flex-direction: column; align-items: center; gap: 8px;
-                    box-shadow: 0 4px 6px -1px rgba(220, 38, 38, 0.1); font-family: sans-serif; font-size: 13px;
-                ">
-                    ${iconTrash} Remove
-                </button>
-
-                <button id="modalReplace" style="
-                    flex: 1; padding: 14px; border-radius: 16px; border: none; cursor: pointer;
-                    background: #e0e7ff; color: #4f46e5; font-weight: 700;
-                    transition: 0.2s; display: flex; flex-direction: column; align-items: center; gap: 8px;
-                    box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1); font-family: sans-serif; font-size: 13px;
-                ">
-                    ${iconSwap} Replace
-                </button>
-            </div>
-            
-            <button id="modalCancel" style="
-                width: 100%; padding: 12px; border-radius: 12px; 
-                border: 1px solid #e5e7eb; cursor: pointer; 
-                background: white; color: #374151; 
-                font-weight: 600; font-family: sans-serif; transition: 0.2s;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-size: 13px;
-            ">Cancel</button>
-        `;
-
-        modalOverlay.appendChild(modalBox);
-        document.body.appendChild(modalOverlay);
-
-        modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
-
-        const cancelBtn = modalBox.querySelector('#modalCancel');
-        cancelBtn.onmouseover = () => { cancelBtn.style.background = '#f9fafb'; cancelBtn.style.borderColor = '#d1d5db'; };
-        cancelBtn.onmouseout = () => { cancelBtn.style.background = 'white'; cancelBtn.style.borderColor = '#e5e7eb'; };
-
-        function openModal(onRemove, onReplace) {
-            modalOverlay.style.opacity = '1'; modalOverlay.style.pointerEvents = 'auto'; modalBox.style.transform = 'scale(1)';
-            const r = document.getElementById('modalRemove').cloneNode(true);
-            const p = document.getElementById('modalReplace').cloneNode(true);
-            const c = document.getElementById('modalCancel').cloneNode(true);
-            
-            [r, p].forEach(btn => {
-                btn.onmouseover = () => { btn.style.transform = "scale(1.03) translateY(-2px)"; btn.style.boxShadow = btn.id === 'modalRemove' ? '0 10px 15px -3px rgba(220, 38, 38, 0.2)' : '0 10px 15px -3px rgba(79, 70, 229, 0.2)'; };
-                btn.onmouseout = () => { btn.style.transform = "scale(1) translateY(0)"; btn.style.boxShadow = btn.id === 'modalRemove' ? '0 4px 6px -1px rgba(220, 38, 38, 0.1)' : '0 4px 6px -1px rgba(79, 70, 229, 0.1)'; };
-            });
-            c.onmouseover = () => { c.style.background = '#f9fafb'; c.style.borderColor = '#d1d5db'; };
-            c.onmouseout = () => { c.style.background = 'white'; c.style.borderColor = '#e5e7eb'; };
-
-            document.getElementById('modalRemove').replaceWith(r);
-            document.getElementById('modalReplace').replaceWith(p);
-            document.getElementById('modalCancel').replaceWith(c);
-            r.onclick = () => { closeModal(); onRemove(); };
-            p.onclick = () => { closeModal(); onReplace(); };
-            c.onclick = () => closeModal();
-        }
-        function closeModal() { modalOverlay.style.opacity = '0'; modalOverlay.style.pointerEvents = 'none'; modalBox.style.transform = 'scale(0.9)'; }
-
-        // 3. TARGETING
-        const canvas = document.getElementById('wheelCanvas');
-        if (!canvas) return;
-        let targetPanel = canvas.closest('.bg-white') || canvas.closest('.lg\\:col-span-2') || canvas.parentElement;
-        if (getComputedStyle(targetPanel).position === 'static') targetPanel.style.position = 'relative';
-
-        const dialContainer = document.createElement('div');
-        dialContainer.style.cssText = `
-            position: absolute; top: 10px; right: 10px;
-            display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 12px;
-            z-index: 60;
-        `;
-
-        // 4. TRIGGER
-        const triggerBtn = document.createElement('div');
-        triggerBtn.innerHTML = '🪄';
-        triggerBtn.style.cssText = `
-            width: 36px; height: 36px; border-radius: 50%; background: white;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center;
-            font-size: 16px; cursor: pointer; border: 1px solid rgba(0,0,0,0.05);
-            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 2;
-        `;
-
-        // 5. MENU
-        const menu = document.createElement('div');
-        menu.style.cssText = `
-            display: flex; gap: 10px; padding-right: 5px;
-            opacity: 0; transform: translateX(20px) scale(0.8); pointer-events: none;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: right top;
-        `;
-
-        function toggleMenu(forceClose = false) {
-            if (forceClose) isMenuOpen = false; else isMenuOpen = !isMenuOpen;
-            if (isMenuOpen) {
-                menu.style.opacity = '1'; menu.style.transform = 'translateX(0) scale(1)'; menu.style.pointerEvents = 'auto';
-                triggerBtn.style.transform = 'rotate(45deg) scale(1.1)'; triggerBtn.style.background = '#f3f4f6';
-            } else {
-                menu.style.opacity = '0'; menu.style.transform = 'translateX(20px) scale(0.8)'; menu.style.pointerEvents = 'none';
-                triggerBtn.style.transform = 'rotate(0deg) scale(1)'; triggerBtn.style.background = 'white';
-            }
-        }
-        triggerBtn.onclick = (e) => { e.stopPropagation(); toggleMenu(); };
-        window.addEventListener('click', (e) => {
-            if (isMenuOpen && !dialContainer.contains(e.target) && !modalBox.contains(e.target)) toggleMenu(true);
-        });
-
-        // 7. BUTTON CREATOR
-        function createBtn(emoji, labelText, inputId) {
-            const wrapper = document.createElement('div');
-            wrapper.style.cssText = `display: flex; flex-direction: column; align-items: center; gap: 2px;`;
-
-            const btn = document.createElement('button');
-            btn.innerHTML = emoji;
-            btn.style.cssText = `
-                width: 34px; height: 34px; border-radius: 50%; border: none;
-                background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-                font-size: 15px; cursor: pointer; transition: all 0.2s;
-                background-size: cover; background-position: center;
-                display: flex; align-items: center; justify-content: center;
-            `;
-            
-            const label = document.createElement('span');
-            label.innerText = labelText;
-            label.style.cssText = `
-                font-size: 9px; font-weight: 800; color: #1f2937;
-                background: rgba(255, 255, 255, 0.9); padding: 2px 5px; border-radius: 4px;
-                text-transform: uppercase; letter-spacing: 0.5px; font-family: sans-serif;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1); pointer-events: none;
-            `;
-
-            btn.onclick = (e) => {
-                e.stopPropagation(); 
-                const input = document.getElementById(inputId);
-                if (btn.classList.contains('has-image')) {
-                    openModal(() => {
-                        input.value = ''; input.dispatchEvent(new Event('resetCustom'));
-                        btn.style.backgroundImage = 'none'; btn.innerHTML = emoji; btn.classList.remove('has-image');
-                    }, () => input.click());
-                } else {
-                    input.click();
-                }
-            };
-
-            wrapper.appendChild(btn);
-            wrapper.appendChild(label);
-            return wrapper;
-        }
-
-        const btnBg = createBtn('🖼️', 'PAGE', 'bgInputMini');
-        const btnPanel = createBtn('⬜', 'BOX', 'panelInputMini');
-        const btnWheel = createBtn('🎡', 'WHEEL', 'wheelInputMini');
-
-menu.appendChild(btnBg);
-        menu.appendChild(btnPanel);
-        menu.appendChild(btnWheel);
-        dialContainer.appendChild(triggerBtn);
-        dialContainer.appendChild(menu);
-        targetPanel.appendChild(dialContainer);
-
-        // 8. INPUTS & LOGIC
-        const inputsDiv = document.createElement('div');
-        inputsDiv.style.display = 'none';
-        inputsDiv.innerHTML = `<input type="file" id="bgInputMini" accept="image/*"><input type="file" id="panelInputMini" accept="image/*"><input type="file" id="wheelInputMini" accept="image/*">`;
-        document.body.appendChild(inputsDiv);
-
-        function setupUpload(id, wrapper, cb) {
-            const el = document.getElementById(id);
-            const btn = wrapper.querySelector('button');
-            el.onchange = (e) => {
-                if (e.target.files[0]) {
-                    const url = URL.createObjectURL(e.target.files[0]);
-                    btn.style.backgroundImage = `url('${url}')`;
-                    btn.innerHTML = ''; btn.classList.add('has-image');
-                    cb(url);
-                }
-            };
-            return el;
-        }
-
-        const bgIn = setupUpload('bgInputMini', btnBg, (url) => {
-            document.body.style.backgroundImage = `url('${url}')`;
-            document.body.style.backgroundSize = 'cover';
-            document.body.style.backgroundAttachment = 'fixed';
-        });
-        bgIn.addEventListener('resetCustom', () => document.body.style.backgroundImage = '');
-
-        const panelIn = setupUpload('panelInputMini', btnPanel, (url) => {
-            targetPanel.style.backgroundImage = `url('${url}')`;
-            targetPanel.style.backgroundSize = 'cover';
-            targetPanel.style.backgroundPosition = 'center center';
-            targetPanel.style.backgroundOrigin = 'border-box'; 
-            targetPanel.style.backgroundClip = 'border-box';
-            targetPanel.style.backgroundBlendMode = 'overlay';
-            targetPanel.style.backgroundColor = 'rgba(0,0,0,0.15)';
-        });
-        panelIn.addEventListener('resetCustom', () => {
-            targetPanel.style.backgroundImage = ''; targetPanel.style.backgroundBlendMode = 'normal'; targetPanel.style.backgroundColor = '';
-            targetPanel.style.backgroundOrigin = ''; targetPanel.style.backgroundClip = '';
-        });
-
-        const wheelIn = setupUpload('wheelInputMini', btnWheel, (url) => {
-            const img = new Image();
-            img.onload = () => { window.wheelImageObj = img; window.wheelPhotoActive = true; if(typeof drawWheel === 'function') drawWheel(); };
-            img.src = url;
-        });
-        wheelIn.addEventListener('resetCustom', () => { window.wheelPhotoActive = false; window.wheelImageObj = null; if(typeof drawWheel === 'function') drawWheel(); });
-
-        // 9. CANVAS PATCHES
-        const originalClearRect = CanvasRenderingContext2D.prototype.clearRect;
-        CanvasRenderingContext2D.prototype.clearRect = function(x, y, w, h) {
-            originalClearRect.apply(this, arguments);
-            if (window.wheelPhotoActive && window.wheelImageObj && this.canvas.id === "wheelCanvas") {
-                const cx = this.canvas.width / 2; const cy = this.canvas.height / 2;
-                const radius = Math.min(cx, cy) - 15;
-                this.save();
-                this.beginPath(); this.arc(cx, cy, radius, 0, Math.PI * 2); this.clip();
-                this.translate(cx, cy); this.rotate(rotation * Math.PI / 180); this.translate(-cx, -cy);
-                this.drawImage(window.wheelImageObj, cx - radius, cy - radius, radius * 2, radius * 2);
-                this.restore();
-            }
-        };
-        const originalFill = CanvasRenderingContext2D.prototype.fill;
-        CanvasRenderingContext2D.prototype.fill = function() {
-            if (window.wheelPhotoActive && this.canvas.id === "wheelCanvas") {
-                if (this.fillStyle !== "#ffd700" && this.fillStyle !== "#FFD700") return;
-            }
-            originalFill.apply(this, arguments);
-        };
-    })();
-</script>
-   
-<div id="seo-content-area" style="
-    max-width: 800px; 
-    margin: 50px auto 40px auto; 
-    font-family: system-ui, -apple-system, sans-serif; 
-    color: #4b5563; 
-    line-height: 1.6; 
-    padding: 30px; 
-    background: rgba(255, 255, 255, 0.96); 
-    backdrop-filter: blur(15px); 
-    border-radius: 24px; 
-    text-align: center;
-    border: 1px solid rgba(0,0,0,0.08);
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-">
-    <h2 style="color: #111827; margin-top: 0; font-size: 1.8rem;">SpinYantra: The <span style="color: #e11d48;">Photo</span> Spin Wheel</h2>
-    <p style="margin-bottom: 25px; font-size: 1.1rem;">
-        Bored of plain text wheels? <strong>SpinYantra</strong> is the only free tool that lets you 
-        <strong>put faces on the wheel!</strong> Customize fonts, upload images, and check your luck instantly.
-    </p>
-
-    <div style="text-align: left; display: inline-block; background: linear-gradient(to right, rgba(255,255,255,0.5), rgba(240,240,255,0.5)); padding: 20px; border-radius: 16px; border: 1px solid rgba(0,0,0,0.05);">
-        <strong>✨ Exclusive Features:</strong>
-        <ul style="margin-top: 10px; padding-left: 20px; list-style: none;">
-            <li style="margin-bottom: 8px;">📸 <strong>Photo Mode:</strong> Upload custom images for every slice. Perfect for "Who pays the bill?" with friends' faces.</li>
-            <li style="margin-bottom: 8px;">🎨 <strong>Stylish Fonts:</strong> Don't be boring. Choose from unique font styles to match your vibe.</li>
-            <li style="margin-bottom: 8px;">⚡ <strong>Instant Share:</strong> Created a funny wheel? Share it instantly with no login.</li>
-            <li style="margin-bottom: 8px;">🚫 <strong>No Ads:</strong> A clean, professional experience.</li>
-        </ul>
+        <button class="btn-forge" onclick="forgeImage()">Forge & Download</button>
     </div>
-    
-    <p style="font-size: 13px; margin-top: 25px; color: #9ca3af;">
-        Trending: spin yantra, lucky wheel, random name picker, truth or dare spinner, faisla machine.
-    </p>
 </div>
 
 <script>
-    (function() {
-        console.log("🚀 SpinYantra: Initializing Official Brand Assets...");
+    const fileInput = document.getElementById('fileInput');
+    const previewImg = document.getElementById('previewImg');
+    const inputWidth = document.getElementById('inputWidth');
+    const inputHeight = document.getElementById('inputHeight');
+    const formatSelect = document.getElementById('formatSelect');
+    
+    let currentRotation = 0;
+    let flipH = 1;
+    let flipV = 1;
+    let aspectRatio = 1;
 
-        // A. SET HD FAVICON (96px for Google Search Results)
-        let link = document.querySelector("link[rel~='icon']");
-        if (!link) {
-            link = document.createElement('link');
-            link.rel = 'icon';
-            document.head.appendChild(link);
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            previewImg.src = event.target.result;
+            previewImg.onload = () => {
+                aspectRatio = previewImg.naturalWidth / previewImg.naturalHeight;
+                inputWidth.value = previewImg.naturalWidth;
+                inputHeight.value = previewImg.naturalHeight;
+                
+                document.getElementById('editor').style.display = 'block';
+                document.getElementById('dropZone').style.display = 'none';
+                updateVisuals();
+            };
+        };
+        reader.readAsDataURL(file);
+    });
+
+    inputWidth.addEventListener('input', () => { 
+        inputHeight.value = Math.round(inputWidth.value / aspectRatio); 
+    });
+    
+    inputHeight.addEventListener('input', () => { 
+        inputWidth.value = Math.round(inputHeight.value * aspectRatio); 
+    });
+
+    function rotate(deg) { currentRotation = (currentRotation + deg) % 360; updateVisuals(); }
+    function flip(dir) {
+        if(dir === 'h') flipH *= -1;
+        if(dir === 'v') flipV *= -1;
+        updateVisuals();
+    }
+
+    function updateVisuals() {
+        previewImg.style.transform = `rotate(${currentRotation}deg) scale(${flipH}, ${flipV})`;
+    }
+
+    function forgeImage() {
+        const format = formatSelect.value;
+        const quality = parseFloat(document.getElementById('qualitySelect').value);
+        const btn = document.querySelector('.btn-forge');
+        
+        btn.innerText = "FORGING...";
+        btn.disabled = true;
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        const w = parseInt(inputWidth.value);
+        const h = parseInt(inputHeight.value);
+
+        // Adjust canvas size for rotations
+        if (Math.abs(currentRotation) === 90 || Math.abs(currentRotation) === 270) {
+            canvas.width = h; canvas.height = w;
+        } else {
+            canvas.width = w; canvas.height = h;
         }
-        link.href = 'https://img.icons8.com/fluency/96/roulette.png'; 
-        link.type = 'image/png';
 
-
-        // B. SET APPLE TOUCH ICON (For iPhone Homescreen)
-        let appleLink = document.querySelector("link[rel='apple-touch-icon']");
-        if (!appleLink) {
-            appleLink = document.createElement('link');
-            appleLink.rel = 'apple-touch-icon';
-            document.head.appendChild(appleLink);
-        }
-        appleLink.href = 'https://img.icons8.com/fluency/96/roulette.png';
-
-
-        // C. OFFICIAL BROWSER TITLE (Brand + Keywords)
-        document.title = "SpinYantra Official - The Ultimate Spin Wheel & Lucky Picker";
-
-
-        // D. HIGH PERFORMANCE SEO META TAGS
-        function setMeta(name, content) {
-            let element = document.querySelector(`meta[name="${name}"]`);
-            if (!element) {
-                element = document.createElement('meta');
-                element.name = name;
-                document.head.appendChild(element);
-            }
-            element.content = content;
+        // White background for JPEGs
+        if (format === 'image/jpeg') {
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
-        // We include "SpinYantra" first, then "Spin Wheel" so you rank for both.
-        setMeta('description', 'SpinYantra is the #1 Free Spin Wheel with Custom Photos. No Ads. Perfect for giveaways, Truth or Dare, and random decisions. Try the Lucky Wheel now.');
-        setMeta('keywords', 'spinyantra, spin wheel, lucky wheel, random picker, wheel of names, custom spin wheel, decision maker, faisla karone wala game');
-        setMeta('theme-color', '#e11d48');
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(currentRotation * Math.PI / 180);
+        ctx.scale(flipH, flipV);
+        ctx.drawImage(previewImg, -w / 2, -h / 2, w, h);
 
+        // THE FIX: Do not pass quality to PNG, and use proper MIME types
+        const exportQuality = (format === "image/png") ? undefined : quality;
+        
+        canvas.toBlob((blob) => {
+            const ext = format.split('/')[1].replace('jpeg', 'jpg');
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            
+            link.download = `forge_${Date.now()}.${ext}`;
+            link.href = url;
+            link.click();
 
-        // E. GOOGLE STRUCTURED DATA (Official App Claim)
-        let script = document.querySelector('script[type="application/ld+json"]');
-        if (!script) {
-            script = document.createElement('script');
-            script.type = 'application/ld+json';
-            document.head.appendChild(script);
-        }
-        script.text = JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "SoftwareApplication",
-            "name": "SpinYantra Official", // This tells Google YOU are the real one
-            "alternateName": ["SpinYantra App", "Spin Yantra Online"],
-            "image": "https://img.icons8.com/fluency/96/roulette.png",
-            "applicationCategory": "GameApplication",
-            "operatingSystem": "Any",
-            "offers": {
-                "@type": "Offer",
-                "price": "0",
-                "priceCurrency": "USD"
-            },
-            "description": "The official SpinYantra app for custom photo spin wheels."
-        });
-
-        console.log("✅ SpinYantra: Official Identity Active.");
-    })();
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+                btn.innerText = "Forge & Download";
+                btn.disabled = false;
+            }, 1000);
+        }, format, exportQuality);
+    }
 </script>
+
+</body>
+</html>
