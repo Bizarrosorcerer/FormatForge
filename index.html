@@ -3,14 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FormatForge | Test 6 (Nuclear)</title>
+    <title>FormatForge | Test 8 (Sureshot)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
         :root {
-            --primary: #ef4444; /* Red for Nuclear/Force */
+            --primary: #3b82f6; /* Trusty Blue */
             --bg: #0f172a;
             --card: #1e293b;
             --text: #f8fafc;
             --border: #334155;
+            --success: #22c55e;
         }
 
         body {
@@ -26,63 +29,70 @@
         }
 
         .test-badge {
-            background: var(--primary);
-            color: white;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-weight: bold;
+            background: var(--success);
+            color: #052e16;
+            padding: 8px 25px;
+            border-radius: 50px;
+            font-weight: 900;
             font-size: 0.9rem;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
-            animation: pulse 2s infinite;
+            letter-spacing: 1.5px;
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+            animation: bounce 1s infinite alternate;
         }
 
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-3px); } }
 
         .container {
             background-color: var(--card);
-            padding: 2rem;
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6);
             width: 100%;
-            max-width: 600px;
+            max-width: 550px;
             text-align: center;
             border: 1px solid var(--border);
         }
 
-        h1 { margin: 0; color: #fff; text-transform: uppercase; letter-spacing: 2px; }
-        
+        h1 { margin: 0; color: white; font-size: 1.8rem; letter-spacing: 1px; }
+        p.desc { color: #94a3b8; margin-bottom: 30px; font-size: 0.95rem; }
+
+        /* Upload Zone */
         .upload-box {
             border: 2px dashed #475569;
-            padding: 40px;
-            border-radius: 12px;
+            padding: 40px 20px;
+            border-radius: 16px;
             cursor: pointer;
             background: #151e2e;
-            margin-top: 20px;
+            transition: all 0.3s ease;
             position: relative;
         }
+        .upload-box:hover { border-color: var(--primary); background: #1e293b; }
         #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 
+        /* Status Log */
         #statusLog {
-            margin-top: 15px;
-            font-family: monospace;
+            margin-top: 20px;
+            font-family: 'Consolas', monospace;
             color: #fbbf24;
-            font-size: 0.9rem;
-            min-height: 20px;
+            font-size: 0.85rem;
             background: rgba(0,0,0,0.3);
-            padding: 5px;
-            border-radius: 4px;
+            padding: 8px;
+            border-radius: 6px;
+            min-height: 20px;
         }
 
-        #editorSection { display: none; margin-top: 20px;}
-        .preview-box {
+        /* Editor */
+        #editorSection { display: none; animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .preview-wrapper {
             background: #000;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
             border: 1px solid var(--border);
-            height: 300px;
+            height: 250px;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -92,13 +102,14 @@
 
         select {
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             background: #0f172a;
             border: 1px solid var(--border);
             color: white;
-            border-radius: 6px;
+            border-radius: 8px;
             font-size: 1rem;
             margin-bottom: 15px;
+            cursor: pointer;
         }
 
         .btn-forge {
@@ -106,48 +117,67 @@
             color: white;
             width: 100%;
             border: none;
-            padding: 16px;
-            border-radius: 8px;
+            padding: 18px;
+            border-radius: 10px;
             font-weight: 800;
             font-size: 1.1rem;
             cursor: pointer;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: transform 0.1s;
         }
         .btn-forge:active { transform: scale(0.98); }
+        .btn-forge:disabled { background: #475569; cursor: not-allowed; }
+
+        .reset-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #64748b;
+            text-decoration: underline;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
     </style>
 </head>
 <body>
 
-<div class="test-badge">TEST 6: FORCE MODE</div>
+<div class="test-badge">TEST 8: SURESHOT MODE</div>
 
 <div class="container">
     <h1>FormatForge</h1>
+    <p class="desc">Universal Secure Converter</p>
     
     <div class="upload-box" id="dropZone">
-        <div style="font-size: 2.5rem; margin-bottom: 10px;">☢️</div>
-        <span style="font-weight: bold; color: #cbd5e1;">Upload Image</span>
+        <div style="font-size: 3rem; margin-bottom: 15px;">🛡️</div>
+        <span style="font-weight: bold; color: #e2e8f0; font-size: 1.1rem;">Click to Upload Image</span>
         <input type="file" id="fileInput" accept="image/*">
     </div>
 
-    <div id="statusLog">System Ready.</div>
+    <div id="statusLog">Waiting for input...</div>
 
     <div id="editorSection">
-        <div class="preview-box">
+        <div class="preview-wrapper">
             <img id="previewImg" src="" alt="Preview">
         </div>
 
-        <select id="formatSelect" onchange="updateButton()">
-            <option value="png">PNG (Lossless)</option>
-            <option value="jpeg">JPEG (Compact)</option>
-            <option value="webp">WebP (Modern)</option>
+        <select id="formatSelect" onchange="updateUI()">
+            <option value="image/png" selected>PNG (Best Quality)</option>
+            <option value="image/jpeg">JPEG (Compressed)</option>
+            <option value="image/webp">WebP (Modern)</option>
         </select>
 
-        <button class="btn-forge" onclick="executeNuclearOption()" id="forgeBtn">FORCE DOWNLOAD PNG</button>
-        <button onclick="location.reload()" style="background:none; border:none; color:#64748b; margin-top:15px; cursor:pointer; text-decoration:underline;">Reset</button>
+        <button class="btn-forge" onclick="processAndPackage()" id="forgeBtn">
+            📦 PACKAGE AS PNG
+        </button>
+        
+        <button class="reset-link" onclick="location.reload()">Convert Another File</button>
     </div>
 </div>
 
 <script>
+    // Elements
     const fileInput = document.getElementById('fileInput');
     const previewImg = document.getElementById('previewImg');
     const editorSection = document.getElementById('editorSection');
@@ -155,14 +185,15 @@
     const statusLog = document.getElementById('statusLog');
     const forgeBtn = document.getElementById('forgeBtn');
 
-    let originalFileName = "image";
+    let originalName = "image";
 
+    // 1. Upload Handler
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
-        originalFileName = file.name.split('.')[0];
-        statusLog.innerText = `Input: ${file.type.toUpperCase()}`;
+        originalName = file.name.split('.')[0].replace(/[^a-z0-9]/gi, '_'); // Clean filename
+        statusLog.innerText = `Analyzing: ${file.type}`;
         statusLog.style.color = "#38bdf8";
 
         const reader = new FileReader();
@@ -171,81 +202,86 @@
             previewImg.onload = function() {
                 dropZone.style.display = 'none';
                 editorSection.style.display = 'block';
+                updateUI();
             }
         };
         reader.readAsDataURL(file);
     });
 
-    function updateButton() {
-        const fmt = document.getElementById('formatSelect').value.toUpperCase();
-        forgeBtn.innerText = `FORCE DOWNLOAD ${fmt}`;
+    // 2. UI Updater
+    function updateUI() {
+        const format = document.getElementById('formatSelect').value;
+        const ext = format.split('/')[1].toUpperCase().replace('JPEG', 'JPG');
+        forgeBtn.innerText = `📦 PACKAGE AS ${ext}`;
     }
 
-    function executeNuclearOption() {
-        const format = document.getElementById('formatSelect').value; // 'png', 'jpeg', 'webp'
+    // 3. The Sureshot Logic (Canvas -> Blob -> Zip -> Save)
+    function processAndPackage() {
+        const format = document.getElementById('formatSelect').value;
         
-        forgeBtn.innerText = "ENCODING...";
+        // Lock UI
         forgeBtn.disabled = true;
-        statusLog.innerText = "Creating binary mask...";
+        forgeBtn.innerText = "PROCESSING...";
+        statusLog.innerText = "Step 1: Rendering High-Res Canvas...";
         statusLog.style.color = "#fbbf24";
 
         setTimeout(() => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = previewImg.naturalWidth;
-            canvas.height = previewImg.naturalHeight;
+            try {
+                // A. Render Image to Canvas
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = previewImg.naturalWidth;
+                canvas.height = previewImg.naturalHeight;
 
-            // Handle Transparency for JPEG
-            if (format === 'jpeg') {
-                ctx.fillStyle = "#FFFFFF";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-            }
-
-            ctx.drawImage(previewImg, 0, 0);
-
-            // Determine correct MIME for the internal data
-            let internalMime = 'image/png';
-            if (format === 'jpeg') internalMime = 'image/jpeg';
-            if (format === 'webp') internalMime = 'image/webp';
-
-            // 1. Get the real image blob
-            canvas.toBlob(function(realBlob) {
-                if(!realBlob) {
-                    statusLog.innerText = "Encoding Failed!";
-                    return;
+                // Handle JPEG Transparency Issue (White BG)
+                if (format === 'image/jpeg') {
+                    ctx.fillStyle = "#FFFFFF";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
                 }
 
-                // 2. THE NUCLEAR MASK
-                // We create a NEW blob that contains the image data, 
-                // but we label it 'application/octet-stream'.
-                // This forces the browser to treat it as a generic file download.
-                const maskedBlob = new Blob([realBlob], { type: "application/octet-stream" });
-                
-                const url = URL.createObjectURL(maskedBlob);
-                const link = document.createElement('a');
-                
-                // Set the extension manually
-                let ext = format;
-                if(format === 'jpeg') ext = 'jpg';
-                
-                link.download = `${originalFileName}_fixed.${ext}`;
-                link.href = url;
-                
-                document.body.appendChild(link);
-                link.click();
-                
-                setTimeout(() => {
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                    statusLog.innerText = `Force Complete: .${ext}`;
-                    statusLog.style.color = "#4ade80"; // Green
-                    forgeBtn.innerText = "DOWNLOAD AGAIN";
-                    forgeBtn.disabled = false;
-                }, 1000);
+                ctx.drawImage(previewImg, 0, 0);
 
-            }, internalMime, 0.9); // 0.9 quality for non-PNGs
+                // B. Convert to Blob
+                statusLog.innerText = "Step 2: Encoding Image Data...";
+                
+                // Use 0.9 quality for lossy, undefined for PNG
+                const quality = (format === 'image/png') ? undefined : 0.9;
 
-        }, 300);
+                canvas.toBlob(function(blob) {
+                    if (!blob) throw new Error("Encoding failed");
+
+                    // C. Package into ZIP (The Shield)
+                    statusLog.innerText = "Step 3: Creating Secure Package...";
+                    
+                    const zip = new JSZip();
+                    let ext = "png";
+                    if(format === "image/jpeg") ext = "jpg";
+                    if(format === "image/webp") ext = "webp";
+
+                    // Add the image to the zip
+                    zip.file(`${originalName}_converted.${ext}`, blob);
+
+                    // D. Download the ZIP
+                    zip.generateAsync({type:"blob"}).then(function(content) {
+                        saveAs(content, `${originalName}_forge.zip`);
+                        
+                        statusLog.innerText = "Success! Check your Downloads folder.";
+                        statusLog.style.color = "#22c55e";
+                        forgeBtn.innerText = "DOWNLOAD COMPLETED";
+                        forgeBtn.disabled = false;
+                        
+                        // Reset button text after 3 seconds
+                        setTimeout(() => updateUI(), 3000);
+                    });
+
+                }, format, quality);
+
+            } catch (err) {
+                statusLog.innerText = "Error: " + err.message;
+                statusLog.style.color = "#ef4444";
+                forgeBtn.disabled = false;
+            }
+        }, 500); // Slight delay to ensure UI updates
     }
 </script>
 
