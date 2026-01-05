@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FormatForge | Analyze & Convert</title>
+    <title>FormatForge | Test 3 Fixed</title>
     <style>
         :root {
-            --primary: #f59e0b; /* Forge Orange */
-            --bg: #0f172a;      /* Deep Slate */
-            --card: #1e293b;    /* Card Slate */
+            --primary: #f59e0b;
+            --bg: #0f172a;
+            --card: #1e293b;
             --text: #f8fafc;
             --border: #334155;
-            --success: #10b981;
         }
 
         body {
@@ -19,11 +18,23 @@
             background-color: var(--bg);
             color: var(--text);
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
             min-height: 100vh;
             margin: 0;
             padding: 20px;
+        }
+
+        .test-badge {
+            background: #dc2626;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .container {
@@ -38,16 +49,15 @@
         }
 
         h1 { margin: 0; color: var(--primary); text-transform: uppercase; letter-spacing: 2px; }
-        p.subtitle { color: #94a3b8; font-size: 0.9rem; margin-bottom: 25px; }
-
-        /* Upload Zone */
+        
+        /* Upload Box */
         .upload-box {
             border: 2px dashed #475569;
             padding: 40px;
             border-radius: 12px;
             cursor: pointer;
             background: #151e2e;
-            transition: 0.3s;
+            margin-top: 20px;
             position: relative;
         }
         .upload-box:hover { border-color: var(--primary); background: #1e293b; }
@@ -60,53 +70,39 @@
             border: 1px solid var(--primary);
             border-radius: 8px;
             padding: 15px;
-            margin-bottom: 20px;
+            margin: 20px 0;
             text-align: left;
         }
-        .info-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-        .info-item label { color: #94a3b8; font-size: 0.75rem; display: block; margin-bottom: 2px; }
-        .info-item span { color: #fff; font-weight: bold; font-family: monospace; font-size: 1.1rem;}
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .info-item label { color: #94a3b8; font-size: 0.75rem; display: block; }
+        .info-item span { color: #fff; font-weight: bold; font-family: monospace; font-size: 1.1rem; }
 
-        /* Editor & Controls */
+        /* Editor */
         #editorSection { display: none; }
-        
         .preview-box {
             background: #000;
             border-radius: 8px;
             margin-bottom: 20px;
             border: 1px solid var(--border);
-            overflow: hidden;
+            height: 300px;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 300px;
+            overflow: hidden;
         }
         #previewImg { max-width: 100%; max-height: 100%; object-fit: contain; }
 
-        .controls-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 20px;
-            text-align: left;
-        }
-
-        .input-group label { display: block; color: #94a3b8; font-size: 0.8rem; margin-bottom: 5px; }
-        select, input {
+        .controls { text-align: left; margin-bottom: 20px; }
+        select {
             width: 100%;
             padding: 12px;
             background: #0f172a;
             border: 1px solid var(--border);
             color: white;
             border-radius: 6px;
-            box-sizing: border-box;
             font-size: 1rem;
+            margin-top: 5px;
         }
-        select:focus, input:focus { outline: none; border-color: var(--primary); }
 
         .btn-forge {
             background: var(--primary);
@@ -119,19 +115,17 @@
             font-size: 1.1rem;
             cursor: pointer;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            transition: 0.2s;
         }
-        .btn-forge:hover { background: #fbbf24; transform: translateY(-2px); }
-        .btn-forge:active { transform: translateY(0); }
+        .btn-forge:hover { background: #fbbf24; }
     </style>
 </head>
 <body>
 
+<div class="test-badge">TEST 3 - FIXED VERSION</div>
+
 <div class="container">
     <h1>FormatForge</h1>
-    <p class="subtitle">Analyze & Transmute Images</p>
-
+    
     <div class="upload-box" id="dropZone">
         <div style="font-size: 2.5rem; margin-bottom: 10px;">📂</div>
         <span style="font-weight: bold; color: #cbd5e1;">Click to Upload Image</span>
@@ -139,18 +133,18 @@
     </div>
 
     <div id="analysisPanel">
-        <div style="font-size:0.8rem; color:var(--primary); margin-bottom:10px; text-transform:uppercase; font-weight:bold;">Image Analysis</div>
+        <div style="font-size:0.8rem; color:var(--primary); margin-bottom:10px; font-weight:bold;">IMAGE ANALYSIS</div>
         <div class="info-grid">
             <div class="info-item">
-                <label>Detected Format</label>
+                <label>DETECTED FORMAT</label>
                 <span id="dispFormat">-</span>
             </div>
             <div class="info-item">
-                <label>File Size</label>
+                <label>FILE SIZE</label>
                 <span id="dispSize">-</span>
             </div>
             <div class="info-item">
-                <label>Dimensions</label>
+                <label>DIMENSIONS</label>
                 <span id="dispDims">-</span>
             </div>
         </div>
@@ -161,26 +155,16 @@
             <img id="previewImg" src="" alt="Preview">
         </div>
 
-        <div class="controls-grid">
-            <div class="input-group">
-                <label>Convert To</label>
-                <select id="formatSelect">
-                    <option value="image/png">PNG (Lossless)</option>
-                    <option value="image/jpeg">JPEG (Compact)</option>
-                    <option value="image/webp">WebP (Modern)</option>
-                </select>
-            </div>
-            <div class="input-group">
-                <label>Quality</label>
-                <select id="qualitySelect">
-                    <option value="1.0">100% (Best)</option>
-                    <option value="0.9" selected>90% (High)</option>
-                    <option value="0.7">70% (Medium)</option>
-                </select>
-            </div>
+        <div class="controls">
+            <label style="color:#94a3b8; font-size:0.8rem; font-weight:bold;">CONVERT TO:</label>
+            <select id="formatSelect" onchange="updateButtonText()">
+                <option value="image/png">PNG (Lossless)</option>
+                <option value="image/jpeg">JPEG (Compact)</option>
+                <option value="image/webp">WebP (Modern)</option>
+            </select>
         </div>
 
-        <button class="btn-forge" onclick="forgeAndDownload()">Forge & Download</button>
+        <button class="btn-forge" onclick="forgeImage()" id="forgeBtn">DOWNLOAD AS PNG</button>
         <button onclick="location.reload()" style="background:none; border:none; color:#64748b; margin-top:15px; cursor:pointer; text-decoration:underline;">Start Over</button>
     </div>
 </div>
@@ -191,107 +175,106 @@
     const analysisPanel = document.getElementById('analysisPanel');
     const editorSection = document.getElementById('editorSection');
     const dropZone = document.getElementById('dropZone');
-
-    // Display Elements
+    
+    // Stats elements
     const dispFormat = document.getElementById('dispFormat');
     const dispSize = document.getElementById('dispSize');
     const dispDims = document.getElementById('dispDims');
+    const forgeBtn = document.getElementById('forgeBtn');
 
     let originalFileName = "image";
 
-    // 1. HANDLE UPLOAD & ANALYSIS
+    // 1. UPLOAD HANDLER
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
-        originalFileName = file.name.split('.')[0]; // Save name for later
-
-        // Show Analysis Data immediately (Size & Type)
+        originalFileName = file.name.split('.')[0];
+        
+        // Show Stats
         dispFormat.innerText = file.type || "Unknown";
         dispSize.innerText = (file.size / 1024).toFixed(1) + " KB";
-        
+
         const reader = new FileReader();
         reader.onload = function(event) {
             previewImg.src = event.target.result;
-            
             previewImg.onload = function() {
-                // Show Dimensions once image loads
                 dispDims.innerText = `${previewImg.naturalWidth} x ${previewImg.naturalHeight}`;
-                
-                // Reveal Interface
                 dropZone.style.display = 'none';
                 analysisPanel.style.display = 'block';
                 editorSection.style.display = 'block';
+                updateButtonText(); // Set initial button text
             }
         };
         reader.readAsDataURL(file);
     });
 
-    // 2. CONVERSION LOGIC (The Fix)
-    function forgeAndDownload() {
-        const btn = document.querySelector('.btn-forge');
+    // 2. UI UPDATE (To confirm selection)
+    function updateButtonText() {
         const format = document.getElementById('formatSelect').value;
-        const quality = parseFloat(document.getElementById('qualitySelect').value);
+        let label = "PNG";
+        if (format === "image/jpeg") label = "JPEG";
+        if (format === "image/webp") label = "WEBP";
+        forgeBtn.innerText = `DOWNLOAD AS ${label}`;
+    }
+
+    // 3. CONVERSION ENGINE (Fixed Logic)
+    function forgeImage() {
+        const format = document.getElementById('formatSelect').value;
+        const btn = document.getElementById('forgeBtn');
         
-        btn.innerText = "Processing...";
+        btn.innerText = "PROCESSING...";
         btn.disabled = true;
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
-        // Set dimensions
         canvas.width = previewImg.naturalWidth;
         canvas.height = previewImg.naturalHeight;
 
-        // CRITICAL: Fill white background if converting to JPEG
-        // (Prevents black backgrounds on transparent PNGs)
+        // FILL BACKGROUND FOR JPEG (Prevent Black Backgrounds)
         if (format === 'image/jpeg') {
             ctx.fillStyle = "#FFFFFF";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
-        // Draw image
         ctx.drawImage(previewImg, 0, 0);
 
-        // Determine Extension
-        let ext = "png";
-        if (format === "image/jpeg") ext = "jpg";
-        if (format === "image/webp") ext = "webp";
+        // --- THE CRITICAL FIX ---
+        // We separate the callback to ensure arguments are passed cleanly
+        const callback = function(blob) {
+            if (!blob) { alert("Error"); return; }
 
-        // CRITICAL: PNG does not support quality param in toBlob
-        const exportQuality = (format === "image/png") ? undefined : quality;
+            // Determine Extension
+            let ext = "png";
+            if (format === "image/jpeg") ext = "jpg";
+            if (format === "image/webp") ext = "webp";
 
-        canvas.toBlob(function(blob) {
-            if (!blob) {
-                alert("Conversion failed.");
-                btn.innerText = "Forge & Download";
-                btn.disabled = false;
-                return;
-            }
+            // Create File with explicit MIME type
+            const newFile = new File([blob], `forge.${ext}`, { type: format });
+            const url = URL.createObjectURL(newFile);
 
-            // CRITICAL: Create a File object with the correct MIME type
-            // This stops browsers from reverting to the original extension
-            const finalFile = new File([blob], `forge.${ext}`, { type: format });
-            
-            const url = URL.createObjectURL(finalFile);
             const link = document.createElement('a');
-            
-            // Timestamped filename
             link.download = `${originalFileName}_forge.${ext}`;
             link.href = url;
-            
             document.body.appendChild(link);
             link.click();
-            
-            // Cleanup
+
             setTimeout(() => {
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
-                btn.innerText = "Forge & Download";
+                updateButtonText();
                 btn.disabled = false;
             }, 1000);
+        };
 
-        }, format, exportQuality);
+        // IF PNG: Do NOT pass quality argument (Browser safety)
+        // IF JPEG/WEBP: Pass quality (0.9)
+        if (format === 'image/png') {
+            canvas.toBlob(callback, 'image/png');
+        } else {
+            canvas.toBlob(callback, format, 0.9);
+        }
     }
 </script>
 
