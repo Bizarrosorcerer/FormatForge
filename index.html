@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FormatForge | Test 8 (Sureshot)</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <title>FormatForge | Test 9 (Direct Save)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
         :root {
-            --primary: #3b82f6; /* Trusty Blue */
+            --primary: #8b5cf6; /* Violet */
             --bg: #0f172a;
             --card: #1e293b;
             --text: #f8fafc;
             --border: #334155;
-            --success: #22c55e;
+            --success: #10b981;
         }
 
         body {
@@ -29,8 +28,8 @@
         }
 
         .test-badge {
-            background: var(--success);
-            color: #052e16;
+            background: var(--primary);
+            color: white;
             padding: 8px 25px;
             border-radius: 50px;
             font-weight: 900;
@@ -38,11 +37,8 @@
             margin-bottom: 25px;
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
-            animation: bounce 1s infinite alternate;
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
         }
-
-        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-3px); } }
 
         .container {
             background-color: var(--card);
@@ -56,9 +52,7 @@
         }
 
         h1 { margin: 0; color: white; font-size: 1.8rem; letter-spacing: 1px; }
-        p.desc { color: #94a3b8; margin-bottom: 30px; font-size: 0.95rem; }
-
-        /* Upload Zone */
+        
         .upload-box {
             border: 2px dashed #475569;
             padding: 40px 20px;
@@ -67,11 +61,11 @@
             background: #151e2e;
             transition: all 0.3s ease;
             position: relative;
+            margin-top: 20px;
         }
         .upload-box:hover { border-color: var(--primary); background: #1e293b; }
         #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 
-        /* Status Log */
         #statusLog {
             margin-top: 20px;
             font-family: 'Consolas', monospace;
@@ -83,9 +77,7 @@
             min-height: 20px;
         }
 
-        /* Editor */
-        #editorSection { display: none; animation: fadeIn 0.5s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        #editorSection { display: none; margin-top: 20px; }
 
         .preview-wrapper {
             background: #000;
@@ -124,34 +116,22 @@
             cursor: pointer;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             transition: transform 0.1s;
         }
         .btn-forge:active { transform: scale(0.98); }
         .btn-forge:disabled { background: #475569; cursor: not-allowed; }
-
-        .reset-link {
-            display: inline-block;
-            margin-top: 20px;
-            color: #64748b;
-            text-decoration: underline;
-            cursor: pointer;
-            background: none;
-            border: none;
-        }
     </style>
 </head>
 <body>
 
-<div class="test-badge">TEST 8: SURESHOT MODE</div>
+<div class="test-badge">TEST 9: DIRECT SAVE (FILESAVER)</div>
 
 <div class="container">
     <h1>FormatForge</h1>
-    <p class="desc">Universal Secure Converter</p>
     
     <div class="upload-box" id="dropZone">
-        <div style="font-size: 3rem; margin-bottom: 15px;">🛡️</div>
-        <span style="font-weight: bold; color: #e2e8f0; font-size: 1.1rem;">Click to Upload Image</span>
+        <div style="font-size: 3rem; margin-bottom: 15px;">💾</div>
+        <span style="font-weight: bold; color: #e2e8f0; font-size: 1.1rem;">Upload Image</span>
         <input type="file" id="fileInput" accept="image/*">
     </div>
 
@@ -163,21 +143,20 @@
         </div>
 
         <select id="formatSelect" onchange="updateUI()">
-            <option value="image/png" selected>PNG (Best Quality)</option>
+            <option value="image/png" selected>PNG (Lossless)</option>
             <option value="image/jpeg">JPEG (Compressed)</option>
             <option value="image/webp">WebP (Modern)</option>
         </select>
 
-        <button class="btn-forge" onclick="processAndPackage()" id="forgeBtn">
-            📦 PACKAGE AS PNG
+        <button class="btn-forge" onclick="directSave()" id="forgeBtn">
+            SAVE AS PNG
         </button>
         
-        <button class="reset-link" onclick="location.reload()">Convert Another File</button>
+        <button onclick="location.reload()" style="background:none; border:none; color:#64748b; margin-top:15px; cursor:pointer; text-decoration:underline;">Reset</button>
     </div>
 </div>
 
 <script>
-    // Elements
     const fileInput = document.getElementById('fileInput');
     const previewImg = document.getElementById('previewImg');
     const editorSection = document.getElementById('editorSection');
@@ -187,13 +166,12 @@
 
     let originalName = "image";
 
-    // 1. Upload Handler
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
-        originalName = file.name.split('.')[0].replace(/[^a-z0-9]/gi, '_'); // Clean filename
-        statusLog.innerText = `Analyzing: ${file.type}`;
+        originalName = file.name.split('.')[0].replace(/[^a-z0-9]/gi, '_'); 
+        statusLog.innerText = `Detected: ${file.type}`;
         statusLog.style.color = "#38bdf8";
 
         const reader = new FileReader();
@@ -208,80 +186,66 @@
         reader.readAsDataURL(file);
     });
 
-    // 2. UI Updater
     function updateUI() {
         const format = document.getElementById('formatSelect').value;
         const ext = format.split('/')[1].toUpperCase().replace('JPEG', 'JPG');
-        forgeBtn.innerText = `📦 PACKAGE AS ${ext}`;
+        forgeBtn.innerText = `SAVE AS ${ext}`;
     }
 
-    // 3. The Sureshot Logic (Canvas -> Blob -> Zip -> Save)
-    function processAndPackage() {
+    function directSave() {
         const format = document.getElementById('formatSelect').value;
         
-        // Lock UI
         forgeBtn.disabled = true;
         forgeBtn.innerText = "PROCESSING...";
-        statusLog.innerText = "Step 1: Rendering High-Res Canvas...";
+        statusLog.innerText = "Encoding image data...";
         statusLog.style.color = "#fbbf24";
 
+        // Slight delay to ensure UI updates
         setTimeout(() => {
-            try {
-                // A. Render Image to Canvas
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = previewImg.naturalWidth;
-                canvas.height = previewImg.naturalHeight;
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = previewImg.naturalWidth;
+            canvas.height = previewImg.naturalHeight;
 
-                // Handle JPEG Transparency Issue (White BG)
-                if (format === 'image/jpeg') {
-                    ctx.fillStyle = "#FFFFFF";
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Handle JPEG Transparency (White Background)
+            if (format === 'image/jpeg') {
+                ctx.fillStyle = "#FFFFFF";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            ctx.drawImage(previewImg, 0, 0);
+
+            // Determine Quality (only needed for JPG/WebP)
+            const quality = (format === 'image/png') ? undefined : 0.9;
+
+            canvas.toBlob(function(blob) {
+                if (!blob) {
+                    statusLog.innerText = "Error: Blob creation failed.";
+                    forgeBtn.disabled = false;
+                    return;
                 }
 
-                ctx.drawImage(previewImg, 0, 0);
-
-                // B. Convert to Blob
-                statusLog.innerText = "Step 2: Encoding Image Data...";
+                // Determine Extension
+                let ext = "png";
+                if(format === "image/jpeg") ext = "jpg";
+                if(format === "image/webp") ext = "webp";
                 
-                // Use 0.9 quality for lossy, undefined for PNG
-                const quality = (format === 'image/png') ? undefined : 0.9;
+                const fileName = `${originalName}_forge.${ext}`;
 
-                canvas.toBlob(function(blob) {
-                    if (!blob) throw new Error("Encoding failed");
+                statusLog.innerText = `Saving ${fileName}...`;
+                
+                // USE FILESAVER.JS - This is the magic line
+                // We pass the blob directly to the specialized saver library
+                saveAs(blob, fileName);
 
-                    // C. Package into ZIP (The Shield)
-                    statusLog.innerText = "Step 3: Creating Secure Package...";
-                    
-                    const zip = new JSZip();
-                    let ext = "png";
-                    if(format === "image/jpeg") ext = "jpg";
-                    if(format === "image/webp") ext = "webp";
-
-                    // Add the image to the zip
-                    zip.file(`${originalName}_converted.${ext}`, blob);
-
-                    // D. Download the ZIP
-                    zip.generateAsync({type:"blob"}).then(function(content) {
-                        saveAs(content, `${originalName}_forge.zip`);
-                        
-                        statusLog.innerText = "Success! Check your Downloads folder.";
-                        statusLog.style.color = "#22c55e";
-                        forgeBtn.innerText = "DOWNLOAD COMPLETED";
-                        forgeBtn.disabled = false;
-                        
-                        // Reset button text after 3 seconds
-                        setTimeout(() => updateUI(), 3000);
-                    });
-
-                }, format, quality);
-
-            } catch (err) {
-                statusLog.innerText = "Error: " + err.message;
-                statusLog.style.color = "#ef4444";
+                statusLog.innerText = "Done! Check downloads.";
+                statusLog.style.color = "#10b981";
+                forgeBtn.innerText = "DOWNLOAD AGAIN";
                 forgeBtn.disabled = false;
-            }
-        }, 500); // Slight delay to ensure UI updates
+
+            }, format, quality);
+
+        }, 300);
     }
 </script>
 
