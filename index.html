@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FormatForge | Test 9 (Direct Save)</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <title>FormatForge | Test 10 (Raw Byte)</title>
     <style>
         :root {
-            --primary: #8b5cf6; /* Violet */
+            --primary: #f43f5e; /* Rose */
             --bg: #0f172a;
             --card: #1e293b;
             --text: #f8fafc;
@@ -37,8 +36,11 @@
             margin-bottom: 25px;
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+            box-shadow: 0 0 20px rgba(244, 63, 94, 0.4);
+            animation: pulse 2s infinite;
         }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
 
         .container {
             background-color: var(--card);
@@ -63,7 +65,6 @@
             position: relative;
             margin-top: 20px;
         }
-        .upload-box:hover { border-color: var(--primary); background: #1e293b; }
         #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 
         #statusLog {
@@ -118,24 +119,22 @@
             letter-spacing: 0.5px;
             transition: transform 0.1s;
         }
-        .btn-forge:active { transform: scale(0.98); }
-        .btn-forge:disabled { background: #475569; cursor: not-allowed; }
     </style>
 </head>
 <body>
 
-<div class="test-badge">TEST 9: DIRECT SAVE (FILESAVER)</div>
+<div class="test-badge">TEST 10: RAW BYTE MODE</div>
 
 <div class="container">
     <h1>FormatForge</h1>
     
     <div class="upload-box" id="dropZone">
-        <div style="font-size: 3rem; margin-bottom: 15px;">💾</div>
+        <div style="font-size: 3rem; margin-bottom: 15px;">🧬</div>
         <span style="font-weight: bold; color: #e2e8f0; font-size: 1.1rem;">Upload Image</span>
         <input type="file" id="fileInput" accept="image/*">
     </div>
 
-    <div id="statusLog">Waiting for input...</div>
+    <div id="statusLog">Waiting...</div>
 
     <div id="editorSection">
         <div class="preview-wrapper">
@@ -148,8 +147,8 @@
             <option value="image/webp">WebP (Modern)</option>
         </select>
 
-        <button class="btn-forge" onclick="directSave()" id="forgeBtn">
-            SAVE AS PNG
+        <button class="btn-forge" onclick="rawByteDownload()" id="forgeBtn">
+            CONVERT TO PNG
         </button>
         
         <button onclick="location.reload()" style="background:none; border:none; color:#64748b; margin-top:15px; cursor:pointer; text-decoration:underline;">Reset</button>
@@ -171,7 +170,7 @@
         if (!file) return;
 
         originalName = file.name.split('.')[0].replace(/[^a-z0-9]/gi, '_'); 
-        statusLog.innerText = `Detected: ${file.type}`;
+        statusLog.innerText = `Input: ${file.type}`;
         statusLog.style.color = "#38bdf8";
 
         const reader = new FileReader();
@@ -189,25 +188,24 @@
     function updateUI() {
         const format = document.getElementById('formatSelect').value;
         const ext = format.split('/')[1].toUpperCase().replace('JPEG', 'JPG');
-        forgeBtn.innerText = `SAVE AS ${ext}`;
+        forgeBtn.innerText = `CONVERT TO ${ext}`;
     }
 
-    function directSave() {
-        const format = document.getElementById('formatSelect').value;
+    function rawByteDownload() {
+        const format = document.getElementById('formatSelect').value; // e.g. 'image/png'
         
         forgeBtn.disabled = true;
-        forgeBtn.innerText = "PROCESSING...";
-        statusLog.innerText = "Encoding image data...";
+        forgeBtn.innerText = "CALCULATING BYTES...";
+        statusLog.innerText = "Converting image to raw binary...";
         statusLog.style.color = "#fbbf24";
 
-        // Slight delay to ensure UI updates
         setTimeout(() => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             canvas.width = previewImg.naturalWidth;
             canvas.height = previewImg.naturalHeight;
 
-            // Handle JPEG Transparency (White Background)
+            // Handle Transparency for JPEG
             if (format === 'image/jpeg') {
                 ctx.fillStyle = "#FFFFFF";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -215,37 +213,47 @@
 
             ctx.drawImage(previewImg, 0, 0);
 
-            // Determine Quality (only needed for JPG/WebP)
-            const quality = (format === 'image/png') ? undefined : 0.9;
+            // 1. Get Base64 String (Force the format here)
+            // This string contains the pure PNG data.
+            const dataURI = canvas.toDataURL(format, (format === 'image/png' ? undefined : 0.9));
 
-            canvas.toBlob(function(blob) {
-                if (!blob) {
-                    statusLog.innerText = "Error: Blob creation failed.";
-                    forgeBtn.disabled = false;
-                    return;
-                }
+            // 2. Convert Base64 to Raw Byte Array (Uint8Array)
+            // This removes the "Image" identity and turns it into pure numbers.
+            const byteString = atob(dataURI.split(',')[1]);
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
 
-                // Determine Extension
-                let ext = "png";
-                if(format === "image/jpeg") ext = "jpg";
-                if(format === "image/webp") ext = "webp";
-                
-                const fileName = `${originalName}_forge.${ext}`;
+            // 3. Create a "Generic" Blob
+            // We lie and say it is 'application/octet-stream'.
+            // This tricks the OS into thinking it's a data file, not a photo.
+            const blob = new Blob([ab], { type: 'application/octet-stream' });
 
-                statusLog.innerText = `Saving ${fileName}...`;
-                
-                // USE FILESAVER.JS - This is the magic line
-                // We pass the blob directly to the specialized saver library
-                saveAs(blob, fileName);
+            // 4. Trigger Download
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            
+            let ext = "png";
+            if(format === "image/jpeg") ext = "jpg";
+            if(format === "image/webp") ext = "webp";
 
-                statusLog.innerText = "Done! Check downloads.";
+            link.href = url;
+            link.download = `${originalName}_forge.${ext}`;
+            document.body.appendChild(link);
+            link.click();
+
+            setTimeout(() => {
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+                statusLog.innerText = "Bytes sent. Check downloads.";
                 statusLog.style.color = "#10b981";
                 forgeBtn.innerText = "DOWNLOAD AGAIN";
                 forgeBtn.disabled = false;
+            }, 1000);
 
-            }, format, quality);
-
-        }, 300);
+        }, 500);
     }
 </script>
 
