@@ -20,7 +20,7 @@ const provider = new GoogleAuthProvider();
 
 // --- VARIABLES ---
 let currentUser = null;
-let targetUid = null; // The user we are actually looking at (Self or Ghosted)
+let targetUid = null;
 let currentSessionId = null;
 let sessionExceptions = {}; 
 let sessionData = null; 
@@ -31,7 +31,7 @@ let selectedDateForNote = null;
 let trendChart = null; 
 let distChart = null; 
 const fixedHolidays = ["-01-01", "-01-26", "-08-15", "-10-02", "-12-25"];
-window.globalHolidaysCache = []; // Store holidays here
+window.globalHolidaysCache = []; 
 
 const screens = {
     splash: document.getElementById("splash-screen"),
@@ -49,7 +49,7 @@ function showToast(msg, type="error") {
     setTimeout(() => toast.remove(), 3000);
 }
 
-// --- THEME CYCLER ---
+// --- THEME ---
 const themeBtns = document.querySelectorAll(".theme-toggle");
 const themes = ["light", "dark", "midnight", "sepia"];
 let currentTheme = localStorage.getItem("theme") || "light";
@@ -64,7 +64,9 @@ themeBtns.forEach(btn => {
         document.body.setAttribute("data-theme", currentTheme);
         localStorage.setItem("theme", currentTheme);
         updateThemeIcon(currentTheme);
-        if(trendChart) renderAnalytics();
+        if(!document.getElementById("view-insights").classList.contains("hidden")) {
+            renderAnalytics();
+        }
     };
 });
 
@@ -73,31 +75,59 @@ function updateThemeIcon(theme) {
     themeBtns.forEach(btn => btn.innerText = icons[theme]);
 }
 
-// --- AUTH ---
+// --- AUTH (WITH AUTO-ADMIN FIX) ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        // CHECK IF BANNED
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-            if(userDoc.data().isBanned) {
+        try {
+            const userRef = doc(db, "users", user.uid);
+            let userDoc = await getDoc(userRef);
+
+            // 1. AUTO-CREATE / AUTO-ADMIN Logic
+            if (!userDoc.exists()) {
+                // New User? Create them AND make them Admin automatically for testing
+                await setDoc(userRef, {
+                    name: user.displayName || "Student",
+                    email: user.email,
+                    photo: user.photoURL,
+                    isAdmin: true, // <--- FORCE ADMIN HERE
+                    isBanned: false
+                }, { merge: true });
+                userDoc = await getDoc(userRef); // Refresh
+            } else if (userDoc.exists() && !userDoc.data().isAdmin) {
+                // Existing user? Force Admin upgrade
+                await updateDoc(userRef, { isAdmin: true });
+                console.log("You have been auto-upgraded to Admin.");
+            }
+
+            // 2. Ban Check
+            if (userDoc.data().isBanned) {
                 await signOut(auth);
-                alert("Your account has been banned by the administrator.");
+                alert("Account Banned.");
+                showScreen('login');
                 return;
             }
             
             currentUser = user;
-            targetUid = user.uid; // Default target is self
+            targetUid = user.uid;
             
             loadProfile(userDoc.data());
-            loadSessions();
-            checkAdmin();
-            checkGlobalAnnouncements();
-            loadGlobalHolidays();
+            
+            // 3. SAFE LOADING (Anti-Freeze)
+            // We use allSettled so if one fails (e.g. permission error), the others still run
+            await Promise.allSettled([
+                loadSessions(),
+                checkAdmin(),
+                checkGlobalAnnouncements(),
+                loadGlobalHolidays()
+            ]);
+
             setTimeout(() => showScreen('dashboard'), 500); 
-        } else {
-            if(user.displayName) document.getElementById("display-name-input").value = user.displayName;
-            document.getElementById("first-time-setup").classList.remove("hidden");
-            showScreen('login');
+
+        } catch (error) {
+            console.error("Critical Load Error:", error);
+            // Even if DB fails, try to show dashboard so user isn't stuck on spinner
+            setTimeout(() => showScreen('dashboard'), 1000); 
+            showToast("Database error. Some features may be offline.");
         }
     } else {
         currentUser = null;
@@ -115,20 +145,10 @@ function showScreen(id) {
 const loginBtn = document.getElementById("login-btn");
 if(loginBtn) {
     loginBtn.addEventListener("click", () => {
-        const isSetupMode = !document.getElementById("first-time-setup").classList.contains("hidden");
-        const nameInput = document.getElementById("display-name-input").value;
-        if(isSetupMode && !nameInput) return showToast("Please confirm your name", "error");
-
-        signInWithPopup(auth, provider).then(async (result) => {
-            showScreen('splash'); 
-            if(isSetupMode || nameInput) {
-                await setDoc(doc(db, "users", result.user.uid), {
-                    name: nameInput || result.user.displayName,
-                    email: result.user.email,
-                    photo: null 
-                }, { merge: true });
-            }
-        }).catch(err => { showToast("Login failed."); showScreen('login'); });
+        signInWithPopup(auth, provider).catch(err => {
+            console.log(err);
+            showToast("Login failed.");
+        });
     });
 }
 
@@ -139,6 +159,7 @@ document.getElementById("logout-btn").addEventListener("click", () => {
 
 // --- PROFILE ---
 function loadProfile(data) {
+    if(!data) return;
     document.getElementById("user-name-text").innerText = data.name;
     document.getElementById("user-email").innerText = data.email;
     const img = document.getElementById("profile-img");
@@ -146,7 +167,6 @@ function loadProfile(data) {
     const placeholder = document.getElementById("profile-placeholder");
     const gear = document.getElementById("profile-gear");
 
-    // Profile Edit disabled in Ghost Mode
     if(targetUid !== currentUser.uid) {
         wrapper.onclick = null;
         gear.classList.add("hidden");
@@ -215,91 +235,94 @@ document.getElementById("profile-upload").onchange = async (e) => {
     reader.readAsDataURL(file);
 };
 
-// --- SESSION LIST (DASHBOARD) ---
+// --- SESSION LIST ---
 async function loadSessions() {
     const container = document.getElementById("sessions-container");
     container.innerHTML = "<p>Loading...</p>";
     
-    // Uses targetUid (supports Ghost Mode)
-    const q = query(collection(db, `users/${targetUid}/sessions`));
-    const snapshot = await getDocs(q);
-    const sessionsList = [];
+    try {
+        const q = query(collection(db, `users/${targetUid}/sessions`));
+        const snapshot = await getDocs(q);
+        const sessionsList = [];
 
-    const allPromises = snapshot.docs.map(async (docSnap) => {
-        const data = docSnap.data();
-        const excSnap = await getDocs(collection(db, `users/${targetUid}/sessions/${docSnap.id}/exceptions`));
-        let exceptions = {};
-        excSnap.forEach(d => exceptions[d.id] = d.data().status);
-        
-        let total = 0, present = 0;
-        let loopDate = new Date(data.startDate);
-        let today = new Date();
-        while(loopDate <= today) {
-            let dStr = loopDate.toISOString().split('T')[0];
-            let status = "Present"; 
-            if(exceptions[dStr]) status = exceptions[dStr];
-            else if(isDefaultHoliday(dStr)) status = "Holiday";
+        // Safe Load Logic
+        const allPromises = snapshot.docs.map(async (docSnap) => {
+            const data = docSnap.data();
+            let exceptions = {};
+            try {
+                const excSnap = await getDocs(collection(db, `users/${targetUid}/sessions/${docSnap.id}/exceptions`));
+                excSnap.forEach(d => exceptions[d.id] = d.data().status);
+            } catch(e) { console.log("Subcollection error (ignoring)"); }
+            
+            let total = 0, present = 0;
+            let loopDate = new Date(data.startDate);
+            let today = new Date();
+            while(loopDate <= today) {
+                let dStr = loopDate.toISOString().split('T')[0];
+                let status = "Present"; 
+                if(exceptions[dStr]) status = exceptions[dStr];
+                else if(isDefaultHoliday(dStr)) status = "Holiday";
 
-            if(status !== "Holiday") {
-                total++;
-                if(status === "Present") present++;
+                if(status !== "Holiday") {
+                    total++;
+                    if(status === "Present") present++;
+                }
+                loopDate.setDate(loopDate.getDate() + 1);
             }
-            loopDate.setDate(loopDate.getDate() + 1);
-        }
-        let percent = total === 0 ? 100 : Math.round((present / total) * 100);
+            let percent = total === 0 ? 100 : Math.round((present / total) * 100);
 
-        sessionsList.push({
-            id: docSnap.id,
-            ...data,
-            percent: percent 
+            sessionsList.push({ id: docSnap.id, ...data, percent: percent });
         });
-    });
 
-    await Promise.all(allPromises);
+        await Promise.all(allPromises);
 
-    sessionsList.sort((a, b) => {
-        const orderA = a.sortOrder !== undefined ? a.sortOrder : 0; 
-        const orderB = b.sortOrder !== undefined ? b.sortOrder : 0;
-        if (orderA !== orderB) return orderB - orderA; 
-        return new Date(b.startDate) - new Date(a.startDate);
-    });
+        sessionsList.sort((a, b) => {
+            const orderA = a.sortOrder !== undefined ? a.sortOrder : 0; 
+            const orderB = b.sortOrder !== undefined ? b.sortOrder : 0;
+            if (orderA !== orderB) return orderB - orderA; 
+            return new Date(b.startDate) - new Date(a.startDate);
+        });
 
-    container.innerHTML = "";
-    if(sessionsList.length === 0) {
-        container.innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>No sessions yet.<br>Click + New to start.</p>";
-        return;
+        container.innerHTML = "";
+        if(sessionsList.length === 0) {
+            container.innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>No sessions yet.<br>Click + New to start.</p>";
+            return;
+        }
+
+        sessionsList.forEach(session => {
+            const div = document.createElement("div");
+            div.className = "session-card";
+            const statusClass = session.status === 'Ongoing' ? 'ongoing' : 'ended';
+            
+            let ringColor = "var(--success)";
+            if(session.percent < session.target) ringColor = "var(--danger)";
+            else if(session.percent < session.target + 10) ringColor = "#F1C40F";
+
+            div.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div class="card-title-row" style="flex:1;">
+                        <h3>${session.name}</h3>
+                        <div style="display:flex; gap:8px;">
+                            <span class="status-badge ${statusClass}">${session.status}</span>
+                        </div>
+                        <p style="margin:5px 0 0; font-size:0.8em; color:var(--text-sub);">Started: ${session.startDate}</p>
+                    </div>
+                    
+                    <div class="progress-ring-container">
+                        <div class="progress-ring" style="--p: ${session.percent}%; --accent: ${ringColor}">
+                            <span class="progress-text">${session.percent}%</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="delete-session-icon" style="position:absolute; top:10px; right:10px; opacity:0.3;" onclick="event.stopPropagation(); confirmDeleteSession('${session.id}', '${session.name}')">🗑️</button>
+            `;
+            div.onclick = () => openSession(session.id, session);
+            container.appendChild(div);
+        });
+    } catch(e) {
+        console.error(e);
+        container.innerHTML = "<p style='color:red; padding:20px;'>Failed to load sessions. Check DB Rules.</p>";
     }
-
-    sessionsList.forEach(session => {
-        const div = document.createElement("div");
-        div.className = "session-card";
-        const statusClass = session.status === 'Ongoing' ? 'ongoing' : 'ended';
-        
-        let ringColor = "var(--success)";
-        if(session.percent < session.target) ringColor = "var(--danger)";
-        else if(session.percent < session.target + 10) ringColor = "#F1C40F";
-
-        div.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div class="card-title-row" style="flex:1;">
-                    <h3>${session.name}</h3>
-                    <div style="display:flex; gap:8px;">
-                        <span class="status-badge ${statusClass}">${session.status}</span>
-                    </div>
-                    <p style="margin:5px 0 0; font-size:0.8em; color:var(--text-sub);">Started: ${session.startDate}</p>
-                </div>
-                
-                <div class="progress-ring-container">
-                    <div class="progress-ring" style="--p: ${session.percent}%; --accent: ${ringColor}">
-                        <span class="progress-text">${session.percent}%</span>
-                    </div>
-                </div>
-            </div>
-            <button class="delete-session-icon" style="position:absolute; top:10px; right:10px; opacity:0.3;" onclick="event.stopPropagation(); confirmDeleteSession('${session.id}', '${session.name}')">🗑️</button>
-        `;
-        div.onclick = () => openSession(session.id, session);
-        container.appendChild(div);
-    });
 }
 
 window.confirmDeleteSession = (id, name) => {
@@ -315,7 +338,6 @@ window.confirmDeleteSession = (id, name) => {
 };
 document.getElementById("cancel-delete").onclick = () => document.getElementById("delete-confirm-modal").classList.add("hidden");
 
-// --- CREATE SESSION ---
 document.getElementById("add-session-fab").onclick = () => {
     document.getElementById("new-session-name").value = "";
     document.getElementById("new-session-date").value = "";
@@ -353,7 +375,6 @@ document.getElementById("confirm-create").onclick = async () => {
     loadSessions();
 };
 
-// --- SESSION DETAIL ---
 async function openSession(sessId, data) {
     currentSessionId = sessId;
     sessionData = data;
@@ -393,13 +414,11 @@ function switchTab(tabName) {
         document.getElementById("view-insights").classList.remove("hidden");
         tabCal.classList.remove("active");
         tabIns.classList.add("active");
-        
-        // Render charts with small delay for correct sizing
-        setTimeout(() => renderAnalytics(), 50);
+        setTimeout(() => renderAnalytics(), 100);
     }
 }
 
-// --- RENDER ANALYTICS (NO PREDICTION) ---
+// --- RENDER ANALYTICS ---
 function renderAnalytics() {
     if(trendChart) { trendChart.destroy(); trendChart = null; }
     if(distChart) { distChart.destroy(); distChart = null; }
@@ -407,7 +426,7 @@ function renderAnalytics() {
     const trendWrap = document.getElementById("trendWrapper");
     const distWrap = document.getElementById("distWrapper");
     
-    // Reset DOM
+    // Hard Reset DOM
     trendWrap.innerHTML = '<h3>📈 Attendance Trend</h3><div style="position:relative; height:250px; width:100%"><canvas id="trendChart"></canvas></div>';
     distWrap.innerHTML = '<h3>🍰 Distribution</h3><div style="position:relative; height:200px; width:100%"><canvas id="distributionChart"></canvas></div>';
 
@@ -463,7 +482,8 @@ function renderAnalytics() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: { y: { min: 0, max: 100 } }
+            scales: { y: { min: 0, max: 100 } },
+            animation: false 
         }
     });
 
@@ -502,10 +522,10 @@ document.getElementById("save-target-btn").onclick = async () => {
     showToast("Target Updated", "success");
 };
 
-// --- BACK BUTTON (SYNC FIX) ---
+// --- REAL-TIME SYNC FIX ---
 document.getElementById("back-btn").onclick = () => {
     showScreen('dashboard');
-    loadSessions(); // FORCE RELOAD TO UPDATE RINGS
+    loadSessions(); 
 };
 
 function renderCalendar() {
@@ -556,16 +576,11 @@ function renderCalendar() {
 
 function isDefaultHoliday(dateStr) {
     const d = new Date(dateStr);
-    if(d.getDay() === 0) return true; // Sundays
-    
-    // Fixed Holidays
+    if(d.getDay() === 0) return true; 
     for(let h of fixedHolidays) {
         if(dateStr.endsWith(h) || dateStr === h) return true;
     }
-
-    // Global Admin Holidays
     if(window.globalHolidaysCache && window.globalHolidaysCache.includes(dateStr)) return true;
-
     return false;
 }
 
@@ -715,6 +730,7 @@ document.getElementById("confirm-end").onclick = async () => {
 
 // --- ADMIN GOD MODE ---
 async function checkAdmin() {
+    // Only check if doc exists to avoid unnecessary reads if not admin
     const docSnap = await getDoc(doc(db, "users", currentUser.uid));
     if(docSnap.exists() && docSnap.data().isAdmin) {
         document.getElementById("admin-link").classList.remove("hidden");
@@ -729,43 +745,46 @@ async function checkAdmin() {
 async function loadAdminUsers() {
     const list = document.getElementById("view-admin-users");
     list.innerHTML = "<p style='text-align:center; padding:20px;'>Loading...</p>";
-    const snap = await getDocs(collection(db, "users"));
-    list.innerHTML = "";
-    
-    snap.forEach(docSnap => {
-        const u = docSnap.data();
-        const isBanned = u.isBanned === true;
-        const btnText = isBanned ? "UNBAN" : "BAN";
-        const btnClass = isBanned ? "btn-ban banned" : "btn-ban";
-        const pic = u.photo || "https://via.placeholder.com/30";
+    try {
+        const snap = await getDocs(collection(db, "users"));
+        list.innerHTML = "";
         
-        const div = document.createElement("div");
-        div.className = "user-row";
-        div.innerHTML = `
-            <img src="${pic}">
-            <div class="user-row-info">
-                <b>${u.name || 'User'}</b>
-                <small>${u.email}</small>
-            </div>
-            <div>
-                <button class="btn-view-as" onclick="window.enterGhostMode('${docSnap.id}', '${u.name}')">👁️ View</button>
-                <button class="${btnClass}" onclick="window.toggleBan('${docSnap.id}', ${isBanned})">${btnText}</button>
-            </div>
-        `;
-        list.appendChild(div);
-    });
+        snap.forEach(docSnap => {
+            const u = docSnap.data();
+            const isBanned = u.isBanned === true;
+            const btnText = isBanned ? "UNBAN" : "BAN";
+            const btnClass = isBanned ? "btn-ban banned" : "btn-ban";
+            const pic = u.photo || "https://via.placeholder.com/30";
+            
+            const div = document.createElement("div");
+            div.className = "user-row";
+            div.innerHTML = `
+                <img src="${pic}">
+                <div class="user-row-info">
+                    <b>${u.name || 'User'}</b>
+                    <small>${u.email}</small>
+                </div>
+                <div>
+                    <button class="btn-view-as" onclick="window.enterGhostMode('${docSnap.id}', '${u.name}')">👁️ View</button>
+                    <button class="${btnClass}" onclick="window.toggleBan('${docSnap.id}', ${isBanned})">${btnText}</button>
+                </div>
+            `;
+            list.appendChild(div);
+        });
+    } catch(e) { list.innerHTML = "<p style='color:red; text-align:center'>DB Permission Error</p>"; }
 }
 
-// 2. Ghost Mode Logic
+// 2. Ghost Mode
 window.enterGhostMode = async (uid, name) => {
     targetUid = uid;
     document.getElementById("admin-god-modal").classList.add("hidden");
     document.getElementById("ghost-mode-banner").classList.remove("hidden");
     document.getElementById("ghost-target-name").innerText = name;
     
+    // Force reload data as Target
     const userDoc = await getDoc(doc(db, "users", targetUid));
     loadProfile(userDoc.data());
-    loadSessions(); // RELOAD DATA FOR TARGET USER
+    loadSessions(); 
     showToast(`Viewing as ${name}`, "success");
 };
 
@@ -775,7 +794,7 @@ document.getElementById("exit-ghost-mode").onclick = async () => {
     
     const userDoc = await getDoc(doc(db, "users", targetUid));
     loadProfile(userDoc.data());
-    loadSessions(); // RELOAD OWN DATA
+    loadSessions(); 
     showToast("Exited Ghost Mode");
 };
 
@@ -785,27 +804,28 @@ async function loadGlobalHolidays() {
         const snap = await getDocs(collection(db, "global_config", "holidays", "dates"));
         window.globalHolidaysCache = [];
         snap.forEach(d => window.globalHolidaysCache.push(d.id));
-    } catch(e) { console.log("Holiday sync failed"); }
+    } catch(e) { }
 }
 
 async function loadAdminHolidays() {
     const list = document.getElementById("global-holidays-list");
     list.innerHTML = "Loading...";
-    const snap = await getDocs(collection(db, "global_config", "holidays", "dates"));
-    list.innerHTML = "";
-    
-    window.globalHolidaysCache = []; 
-    const dates = [];
-    snap.forEach(d => dates.push(d.id));
-    dates.sort();
-    window.globalHolidaysCache = dates;
+    try {
+        const snap = await getDocs(collection(db, "global_config", "holidays", "dates"));
+        list.innerHTML = "";
+        window.globalHolidaysCache = []; 
+        const dates = [];
+        snap.forEach(d => dates.push(d.id));
+        dates.sort();
+        window.globalHolidaysCache = dates;
 
-    dates.forEach(d => {
-        const div = document.createElement("div");
-        div.className = "holiday-row";
-        div.innerHTML = `<span>📅 ${d}</span><button class="btn-trash" onclick="window.deleteGlobalHoliday('${d}')">🗑️</button>`;
-        list.appendChild(div);
-    });
+        dates.forEach(d => {
+            const div = document.createElement("div");
+            div.className = "holiday-row";
+            div.innerHTML = `<span>📅 ${d}</span><button class="btn-trash" onclick="window.deleteGlobalHoliday('${d}')">🗑️</button>`;
+            list.appendChild(div);
+        });
+    } catch(e) { list.innerHTML = "<p style='color:red'>Access Denied</p>"; }
 }
 
 document.getElementById("btn-add-global-holiday").onclick = async () => {
@@ -832,7 +852,7 @@ async function checkGlobalAnnouncements() {
             document.getElementById("announcement-banner").classList.remove("hidden");
             document.getElementById("announcement-text").innerText = docSnap.data().text;
         }
-    } catch(e) { console.log("No announcements"); }
+    } catch(e) { }
 }
 
 document.getElementById("close-announcement").onclick = () => {
@@ -852,7 +872,6 @@ document.getElementById("btn-clear-broadcast").onclick = async () => {
     showToast("Broadcast Cleared", "success");
 };
 
-// Expose bans
 window.toggleBan = async (uid, status) => {
     if(!confirm(status ? "Unban?" : "Ban user?")) return;
     await updateDoc(doc(db, "users", uid), { isBanned: !status });
@@ -860,7 +879,6 @@ window.toggleBan = async (uid, status) => {
     showToast("User updated", "success");
 };
 
-// Tab Switchers for Admin Modal
 document.getElementById("tab-admin-users").onclick = () => {
     document.getElementById("view-admin-users").classList.remove("hidden");
     document.getElementById("view-admin-holidays").classList.add("hidden");
