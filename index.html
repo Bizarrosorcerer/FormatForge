@@ -22,7 +22,7 @@
 
     <div id="login-screen" class="hidden">
         <div class="login-card">
-            <h1>Welcome Student</h1>
+            <h1>Welcome</h1>
             <p>Your academic assistant.</p>
             <div id="first-time-setup" class="hidden">
                 <input type="text" id="display-name-input" placeholder="Enter your Name">
@@ -34,12 +34,21 @@
     </div>
 
     <div id="dashboard-screen" class="hidden">
+        <div id="announcement-banner" class="hidden">
+            <span id="announcement-text"></span>
+            <button id="close-announcement">✕</button>
+        </div>
+
+        <div id="ghost-mode-banner" class="ghost-banner hidden">
+            <span>👻 Viewing as <b id="ghost-target-name">User</b></span>
+            <button id="exit-ghost-mode">Exit</button>
+        </div>
+
         <div class="app-header">
             <div class="profile-section">
                 <div class="profile-wrapper" id="profile-action-btn">
                     <img id="profile-img" src="" class="hidden">
                     <div id="profile-placeholder" class="placeholder-icon">+</div>
-                    <div id="profile-gear" class="gear-overlay hidden">⚙️</div>
                 </div>
                 <input type="file" id="profile-upload" accept="image/*" hidden>
 
@@ -63,7 +72,8 @@
         </div>
 
         <div id="sessions-container"></div>
-        <p id="admin-link" class="hidden" style="margin-top:20px; color:#ff0055; cursor:pointer; font-size:0.8em; text-align: center;">Admin Directory</p>
+        
+        <p id="admin-link" class="hidden" style="margin-top:20px; color:#ff0055; cursor:pointer; font-size:0.8em; text-align: center;">⚡ Admin Console</p>
     </div>
 
     <div id="session-detail-screen" class="hidden">
@@ -109,7 +119,6 @@
                 <div class="legend-item"><span class="square blue"></span> Holiday</div>
                 <div class="legend-item"><span class="icon-legend">📝</span> Note</div>
             </div>
-            <div class="legend-instruction">(Long press any date to add a note)</div>
 
             <div class="calendar-wrapper">
                 <div class="calendar-nav">
@@ -125,28 +134,6 @@
         </div>
 
         <div id="view-insights" class="hidden">
-            <div class="prediction-container">
-                <div class="prediction-header">
-                    <h3>🔮 Predictor</h3>
-                    <div class="toggle-switch">
-                        <div id="pred-attend" class="toggle-opt active attend">Attend</div>
-                        <div id="pred-bunk" class="toggle-opt">Bunk</div>
-                    </div>
-                </div>
-                
-                <p style="font-size:0.85em; color:var(--text-sub); margin-bottom:10px;">
-                    Next <span id="slider-val-display" style="font-weight:bold;">1</span> classes:
-                </p>
-                
-                <div class="slider-container">
-                    <input type="range" id="pred-slider" min="1" max="20" value="1">
-                </div>
-
-                <div class="prediction-result" id="prediction-text">
-                    Move slider to simulate.
-                </div>
-            </div>
-
             <div id="trendWrapper" class="chart-container">
                 <h3>📈 Attendance Trend</h3>
                 <canvas id="trendChart"></canvas>
@@ -154,12 +141,51 @@
             
             <div id="distWrapper" class="chart-container">
                 <h3>🍰 Distribution</h3>
-                <canvas id="distributionChart"></canvas>
+                <canvas id="distributionChart" style="max-height: 200px;"></canvas>
             </div>
         </div>
 
         <div class="bottom-actions">
             <button id="end-session-btn" class="btn-danger-outline">End Session / Freeze</button>
+        </div>
+    </div>
+
+    <div id="admin-god-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px; width: 95%; max-height: 80vh; overflow-y: auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3 style="margin:0;">⚡ God Mode</h3>
+                <button id="close-god-mode" class="btn-text" style="padding:0; font-size:1.2em;">✕</button>
+            </div>
+
+            <div class="tab-switcher-container" style="margin-bottom:15px;">
+                <div class="tab-switcher">
+                    <button class="tab-btn active" id="tab-admin-users">Users</button>
+                    <button class="tab-btn" id="tab-admin-holidays">Holidays</button>
+                    <button class="tab-btn" id="tab-admin-broadcast">📢</button>
+                </div>
+            </div>
+
+            <div id="view-admin-users" class="scrollable-list" style="height: 300px;">
+                <p>Loading users...</p>
+            </div>
+
+            <div id="view-admin-holidays" class="hidden">
+                <div style="display:flex; gap:10px; margin-bottom:15px;">
+                    <input type="date" id="new-global-date" style="margin:0;">
+                    <button id="btn-add-global-holiday" class="btn-primary" style="padding:10px;">+</button>
+                </div>
+                <p style="font-size:0.8em; color:#666;">Global holidays apply to EVERYONE.</p>
+                <div id="global-holidays-list" class="scrollable-list" style="height: 200px;">
+                    <p>Loading holidays...</p>
+                </div>
+            </div>
+
+            <div id="view-admin-broadcast" class="hidden">
+                <label>Send Announcement:</label>
+                <textarea id="broadcast-input" rows="3" placeholder="Server maintenance at 10 PM..."></textarea>
+                <button id="btn-send-broadcast" class="btn-primary" style="width:100%;">🚀 Broadcast to All</button>
+                <button id="btn-clear-broadcast" class="btn-danger-outline" style="width:100%; margin-top:10px;">Clear Announcement</button>
+            </div>
         </div>
     </div>
 
@@ -186,10 +212,10 @@
             <input type="date" id="new-session-date"> 
             <label>Target %:</label>
             <input type="number" id="new-session-target" placeholder="75" value="75">
-            <label>Position in List:</label>
+            <label>Position:</label>
             <select id="new-session-position" class="full-select">
-                <option value="top" selected>Add to Top (Newest)</option>
-                <option value="bottom">Add to Bottom</option>
+                <option value="top" selected>Top</option>
+                <option value="bottom">Bottom</option>
             </select>
             <div class="modal-actions">
                 <button id="cancel-create" class="btn-text">Cancel</button>
@@ -265,14 +291,6 @@
         </div>
     </div>
 
-    <div id="admin-modal" class="modal hidden">
-        <div class="modal-content">
-            <h3>User Directory</h3>
-            <div id="admin-list" class="scrollable-list"></div>
-            <button id="close-admin" class="btn-text-full">Close</button>
-        </div>
-    </div>
-
-    <script type="module" src="app.js?v=FINAL_FIX_V2"></script>
+    <script type="module" src="app.js?v=ADMIN_POWER"></script>
 </body>
 </html>
