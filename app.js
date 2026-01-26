@@ -1,8 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy, where, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
 
-// --- CONFIG ---
 const firebaseConfig = {
     apiKey: "AIzaSyDAUrjhba6zQS47RpS4jH0QyvAw3U7dlcw",
     authDomain: "logintester1-e9b27.firebaseapp.com",
@@ -15,210 +14,613 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+enableIndexedDbPersistence(db).catch((err) => { console.log("Persistence error:", err.code); });
 const provider = new GoogleAuthProvider();
 
-// --- STATE ---
+// --- VARIABLES ---
 let currentUser = null;
 let currentSessionId = null;
 let sessionExceptions = {}; 
 let sessionData = null; 
 let viewDate = new Date(); 
+let longPressTimer;
+let isLongPress = false;
+let selectedDateForNote = null;
+let trendChart = null; 
+let distChart = null; 
+const fixedHolidays = ["-01-01", "-01-26", "-08-15", "-10-02", "-12-25"];
 
-const fixedHolidays = [
-    "-01-01", "-01-26", "-08-15", "-10-02", "-12-25",
-    "2026-03-04", "2026-04-03", "2026-03-20", "2026-10-20", "2026-11-08",
-    "2027-03-22", "2027-03-26", "2027-03-09", "2027-10-09", "2027-10-29"
-];
+// PREDICTOR VARS
+let predSliderValue = 1;
+let predMode = 'attend'; 
+
+// CHART VARS
+let historyLabels = [];
+let historyData = [];
+let lastTotalClasses = 0;
+let lastPresentClasses = 0;
 
 const screens = {
+    splash: document.getElementById("splash-screen"),
     login: document.getElementById("login-screen"),
     dashboard: document.getElementById("dashboard-screen"),
     detail: document.getElementById("session-detail-screen")
 };
 
-// --- SMART AUTH ---
+function showToast(msg, type="error") {
+    const container = document.getElementById("toast-container");
+    const toast = document.createElement("div");
+    toast.className = `toast ${type}`;
+    toast.innerText = msg;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// --- THEME LOGIC ---
+const themeBtns = document.querySelectorAll(".theme-toggle");
+const themes = ["light", "dark", "midnight", "sepia"];
+let currentTheme = localStorage.getItem("theme") || "light";
+document.body.setAttribute("data-theme", currentTheme);
+updateThemeIcon(currentTheme);
+
+themeBtns.forEach(btn => {
+    btn.onclick = () => {
+        let index = themes.indexOf(currentTheme);
+        index = (index + 1) % themes.length; 
+        currentTheme = themes[index];
+        document.body.setAttribute("data-theme", currentTheme);
+        localStorage.setItem("theme", currentTheme);
+        updateThemeIcon(currentTheme);
+        if(!document.getElementById("view-insights").classList.contains("hidden")) {
+            renderAnalytics();
+        }
+    };
+});
+
+function updateThemeIcon(theme) {
+    const icons = { "light": "☀️", "dark": "🌙", "midnight": "🖤", "sepia": "📖" };
+    themeBtns.forEach(btn => btn.innerText = icons[theme]);
+}
+
+// --- AUTH ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
-        
-        // 1. Check if Name Exists in DB
         const userDoc = await getDoc(doc(db, "users", user.uid));
-        
         if (userDoc.exists() && userDoc.data().name) {
-            // Existing User: Go to Dashboard
             loadProfile(userDoc.data());
-            showScreen('dashboard');
             loadSessions();
             checkAdmin();
+            setTimeout(() => showScreen('dashboard'), 500); 
         } else {
-            // New User: Stay on Login but show Name Input
+            if(user.displayName) document.getElementById("display-name-input").value = user.displayName;
             document.getElementById("first-time-setup").classList.remove("hidden");
-            // If they are on the login screen, they need to click "Sign in" again to save the name
-            // Or we can save it now if we have it. 
-            // Better logic: If logged in but no name, prompt name modal or use Dashboard edit.
-            // Let's force them to fill name in the login screen input and click button.
+            showScreen('login');
         }
     } else {
         currentUser = null;
-        showScreen('login');
-        document.getElementById("first-time-setup").classList.add("hidden"); // Hide for next fresh load
+        document.getElementById("first-time-setup").classList.add("hidden");
+        setTimeout(() => showScreen('login'), 500); 
     }
 });
 
-function loadProfile(data) {
-    document.getElementById("user-name").innerHTML = `${data.name} <span id="edit-name-btn">✎</span>`;
-    document.getElementById("user-email").innerText = data.email;
-    if(data.photo) document.getElementById("profile-img").src = data.photo;
-    
-    // Re-attach Edit Listener
-    document.getElementById("edit-name-btn").onclick = () => document.getElementById("edit-name-modal").classList.remove("hidden");
+function showScreen(id) {
+    Object.values(screens).forEach(s => s.classList.add("hidden"));
+    screens[id].classList.remove("hidden");
 }
 
-// LOGIN BUTTON
-document.getElementById("login-btn").addEventListener("click", () => {
-    // If Name Input is visible, it MUST be filled
-    const isSetupMode = !document.getElementById("first-time-setup").classList.contains("hidden");
-    const nameInput = document.getElementById("display-name-input").value;
+const loginBtn = document.getElementById("login-btn");
+if(loginBtn) {
+    loginBtn.addEventListener("click", () => {
+        const isSetupMode = !document.getElementById("first-time-setup").classList.contains("hidden");
+        const nameInput = document.getElementById("display-name-input").value;
+        if(isSetupMode && !nameInput) return showToast("Please confirm your name", "error");
 
-    if(isSetupMode && !nameInput) return alert("Please enter your name to complete setup!");
-
-    signInWithPopup(auth, provider).then(async (result) => {
-        // If it was setup mode, save the name
-        if(isSetupMode && nameInput) {
-            await setDoc(doc(db, "users", result.user.uid), {
-                name: nameInput,
-                email: result.user.email,
-                photo: null // Init photo
-            }, { merge: true });
-            
-            // Reload to trigger AuthStateChanged
-            window.location.reload(); 
-        }
+        signInWithPopup(auth, provider).then(async (result) => {
+            showScreen('splash'); 
+            if(isSetupMode || nameInput) {
+                await setDoc(doc(db, "users", result.user.uid), {
+                    name: nameInput || result.user.displayName,
+                    email: result.user.email,
+                    photo: null 
+                }, { merge: true });
+            }
+        }).catch(err => { showToast("Login failed."); showScreen('login'); });
     });
+}
+
+document.getElementById("logout-btn").addEventListener("click", () => {
+    showScreen('splash'); 
+    signOut(auth);
 });
-document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
 
+// --- PROFILE ---
+function loadProfile(data) {
+    document.getElementById("user-name-text").innerText = data.name;
+    document.getElementById("user-email").innerText = data.email;
+    const img = document.getElementById("profile-img");
+    const wrapper = document.getElementById("profile-action-btn");
+    const placeholder = document.getElementById("profile-placeholder");
+    const gear = document.getElementById("profile-gear");
 
-// --- PROFILE EDIT ---
+    if(data.photo) {
+        img.src = data.photo;
+        img.classList.remove("hidden");
+        placeholder.classList.add("hidden");
+        gear.classList.remove("hidden");
+        wrapper.onclick = () => {
+            document.getElementById("modal-profile-preview").src = data.photo;
+            document.getElementById("profile-options-modal").classList.remove("hidden");
+        };
+    } else {
+        img.src = "";
+        img.classList.add("hidden");
+        placeholder.classList.remove("hidden");
+        gear.classList.add("hidden");
+        wrapper.onclick = () => document.getElementById("profile-upload").click();
+    }
+}
+
+document.getElementById("edit-name-btn").onclick = () => document.getElementById("edit-name-modal").classList.remove("hidden");
 document.getElementById("save-name-btn").onclick = async () => {
     const newName = document.getElementById("edit-name-input").value;
     if(!newName) return;
     await updateDoc(doc(db, "users", currentUser.uid), { name: newName });
-    document.getElementById("user-name").innerHTML = `${newName} <span id="edit-name-btn">✎</span>`;
+    document.getElementById("user-name-text").innerText = newName;
     document.getElementById("edit-name-modal").classList.add("hidden");
+    showToast("Name Updated", "success");
 };
 document.getElementById("cancel-edit-name").onclick = () => document.getElementById("edit-name-modal").classList.add("hidden");
 
-// IMAGE UPLOAD
-document.getElementById("profile-pic-wrapper").onclick = () => document.getElementById("profile-upload").click();
+document.getElementById("btn-replace-photo").onclick = () => {
+    document.getElementById("profile-options-modal").classList.add("hidden");
+    document.getElementById("profile-upload").click();
+};
+document.getElementById("btn-remove-photo").onclick = async () => {
+    document.getElementById("profile-options-modal").classList.add("hidden");
+    await updateDoc(doc(db, "users", currentUser.uid), { photo: null });
+    const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+    loadProfile(userDoc.data());
+    showToast("Photo Removed", "success");
+};
+document.getElementById("close-profile-options").onclick = () => document.getElementById("profile-options-modal").classList.add("hidden");
 document.getElementById("profile-upload").onchange = async (e) => {
     const file = e.target.files[0];
     if(!file) return;
-    
-    // Convert to Base64 (Keep it simple for free hosting)
+    if (file.size > 5 * 1024 * 1024) return showToast("Image too large (Max 5MB)");
     const reader = new FileReader();
     reader.onload = async function(evt) {
         const base64 = evt.target.result;
-        document.getElementById("profile-img").src = base64;
         await updateDoc(doc(db, "users", currentUser.uid), { photo: base64 });
+        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+        loadProfile(userDoc.data());
+        showToast("Photo Updated", "success");
     };
     reader.readAsDataURL(file);
 };
 
-
-// --- DASHBOARD ---
+// --- SESSION LIST ---
 async function loadSessions() {
     const container = document.getElementById("sessions-container");
     container.innerHTML = "<p>Loading...</p>";
     
-    const q = query(collection(db, `users/${currentUser.uid}/sessions`), orderBy("startDate", "desc"));
+    const q = query(collection(db, `users/${currentUser.uid}/sessions`));
     const snapshot = await getDocs(q);
-    
-    container.innerHTML = "";
-    snapshot.forEach(docSnap => {
+    const sessionsList = [];
+
+    const allPromises = snapshot.docs.map(async (docSnap) => {
         const data = docSnap.data();
+        const excSnap = await getDocs(collection(db, `users/${currentUser.uid}/sessions/${docSnap.id}/exceptions`));
+        let exceptions = {};
+        excSnap.forEach(d => exceptions[d.id] = d.data().status);
+        
+        let total = 0, present = 0;
+        let loopDate = new Date(data.startDate);
+        let today = new Date();
+        while(loopDate <= today) {
+            let dStr = loopDate.toISOString().split('T')[0];
+            let status = "Present"; 
+            if(exceptions[dStr]) status = exceptions[dStr];
+            else if(isDefaultHoliday(dStr)) status = "Holiday";
+
+            if(status !== "Holiday") {
+                total++;
+                if(status === "Present") present++;
+            }
+            loopDate.setDate(loopDate.getDate() + 1);
+        }
+        let percent = total === 0 ? 100 : Math.round((present / total) * 100);
+
+        sessionsList.push({
+            id: docSnap.id,
+            ...data,
+            percent: percent 
+        });
+    });
+
+    await Promise.all(allPromises);
+
+    sessionsList.sort((a, b) => {
+        const orderA = a.sortOrder !== undefined ? a.sortOrder : 0; 
+        const orderB = b.sortOrder !== undefined ? b.sortOrder : 0;
+        if (orderA !== orderB) return orderB - orderA; 
+        return new Date(b.startDate) - new Date(a.startDate);
+    });
+
+    container.innerHTML = "";
+    if(sessionsList.length === 0) {
+        container.innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>No sessions yet.<br>Click + New to start.</p>";
+        return;
+    }
+
+    sessionsList.forEach(session => {
         const div = document.createElement("div");
         div.className = "session-card";
+        const statusClass = session.status === 'Ongoing' ? 'ongoing' : 'ended';
+        
+        let ringColor = "var(--success)";
+        if(session.percent < session.target) ringColor = "var(--danger)";
+        else if(session.percent < session.target + 10) ringColor = "#F1C40F";
+
         div.innerHTML = `
-            <h3>${data.name}</h3>
-            <p>Started: ${data.startDate}</p>
-            <span class="badge ${data.status.toLowerCase()}">${data.status}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div class="card-title-row" style="flex:1;">
+                    <h3>${session.name}</h3>
+                    <div style="display:flex; gap:8px;">
+                        <span class="status-badge ${statusClass}">${session.status}</span>
+                    </div>
+                    <p style="margin:5px 0 0; font-size:0.8em; color:var(--text-sub);">Started: ${session.startDate}</p>
+                </div>
+                
+                <div class="progress-ring-container">
+                    <div class="progress-ring" style="--p: ${session.percent}%; --accent: ${ringColor}">
+                        <span class="progress-text">${session.percent}%</span>
+                    </div>
+                </div>
+            </div>
+            <button class="delete-session-icon" style="position:absolute; top:10px; right:10px; opacity:0.3;" onclick="event.stopPropagation(); confirmDeleteSession('${session.id}', '${session.name}')">🗑️</button>
         `;
-        div.onclick = () => openSession(docSnap.id, data);
+        div.onclick = () => openSession(session.id, session);
         container.appendChild(div);
     });
 }
 
-document.getElementById("add-session-fab").onclick = () => document.getElementById("create-modal").classList.remove("hidden");
-document.getElementById("cancel-create").onclick = () => document.getElementById("create-modal").classList.add("hidden");
+window.confirmDeleteSession = (id, name) => {
+    const modal = document.getElementById("delete-confirm-modal");
+    document.getElementById("del-session-name").innerText = name;
+    modal.classList.remove("hidden");
+    document.getElementById("confirm-delete").onclick = async () => {
+        await deleteDoc(doc(db, `users/${currentUser.uid}/sessions`, id));
+        modal.classList.add("hidden");
+        showToast("Session deleted", "success");
+        loadSessions();
+    };
+};
+document.getElementById("cancel-delete").onclick = () => document.getElementById("delete-confirm-modal").classList.add("hidden");
 
+document.getElementById("add-session-fab").onclick = () => {
+    document.getElementById("new-session-name").value = "";
+    document.getElementById("new-session-date").value = "";
+    document.getElementById("new-session-target").value = "75";
+    document.getElementById("new-session-position").value = "top"; 
+    document.getElementById("create-modal").classList.remove("hidden");
+};
+document.getElementById("cancel-create").onclick = () => document.getElementById("create-modal").classList.add("hidden");
 document.getElementById("confirm-create").onclick = async () => {
-    const name = document.getElementById("new-session-name").value;
+    const name = document.getElementById("new-session-name").value.trim();
     const date = document.getElementById("new-session-date").value;
+    let target = document.getElementById("new-session-target").value;
+    const position = document.getElementById("new-session-position").value; 
     
-    if(!name || !date) return alert("Fill all fields");
-    if(new Date(date) > new Date()) return alert("Cannot start in future");
-    if(new Date(date) < new Date("2026-01-01")) return alert("Cannot start before 2026");
+    if(!name || !date) return showToast("Fill all fields");
+    if(!target) target = 75; 
+
+    const q = query(collection(db, `users/${currentUser.uid}/sessions`), where("name", "==", name));
+    const existingCheck = await getDocs(q);
+    if (!existingCheck.empty) return showToast("Session name already exists!", "error");
+
+    let orderValue = Date.now(); 
+    if(position === 'bottom') orderValue = -Date.now();
 
     await addDoc(collection(db, `users/${currentUser.uid}/sessions`), {
         name: name,
         startDate: date,
         endDate: null,
-        status: "Ongoing"
+        status: "Ongoing",
+        target: Number(target),
+        sortOrder: orderValue, 
+        createdAt: Date.now()
     });
-    
     document.getElementById("create-modal").classList.add("hidden");
     loadSessions();
 };
 
-
-// --- SESSION DETAIL ---
 async function openSession(sessId, data) {
     currentSessionId = sessId;
     sessionData = data;
+    if(sessionData.target === undefined) sessionData.target = 75; 
     sessionExceptions = {};
 
     document.getElementById("detail-title").innerText = data.name;
     document.getElementById("detail-dates").innerText = `${data.startDate} — ${data.status === 'Ended' ? data.endDate : 'Ongoing'}`;
-    document.getElementById("attendance-percent").innerText = "--%";
-    
-    // HIDE END BUTTON IF ENDED
-    if(data.status === "Ended") {
-        document.getElementById("end-session-btn").classList.add("hidden");
-    } else {
-        document.getElementById("end-session-btn").classList.remove("hidden");
-    }
+    document.getElementById("edit-target-btn").innerText = `Target: ${sessionData.target}% ✎`;
+
+    if(data.status === "Ended") document.getElementById("end-session-btn").classList.add("hidden");
+    else document.getElementById("end-session-btn").classList.remove("hidden");
 
     const snap = await getDocs(collection(db, `users/${currentUser.uid}/sessions/${sessId}/exceptions`));
-    snap.forEach(d => { sessionExceptions[d.id] = d.data().status; });
+    snap.forEach(d => { sessionExceptions[d.id] = d.data(); });
 
     viewDate = new Date(); 
-    renderCalendar();
     
+    switchTab('calendar');
+    renderCalendar();
+    calculateAttendance(); 
     showScreen('detail');
 }
 
-document.getElementById("back-btn").onclick = () => showScreen('dashboard');
+const tabCal = document.getElementById("tab-calendar");
+const tabIns = document.getElementById("tab-insights");
+tabCal.onclick = () => switchTab('calendar');
+tabIns.onclick = () => switchTab('insights');
 
+// --- THE FIX IS HERE: RESET LOGIC ---
+function switchTab(tabName) {
+    if(tabName === 'calendar') {
+        document.getElementById("view-calendar").classList.remove("hidden");
+        document.getElementById("view-insights").classList.add("hidden");
+        tabCal.classList.add("active");
+        tabIns.classList.remove("active");
+    } else {
+        document.getElementById("view-calendar").classList.add("hidden");
+        document.getElementById("view-insights").classList.remove("hidden");
+        tabCal.classList.remove("active");
+        tabIns.classList.add("active");
+        
+        // NUCLEAR RESET: Force Variables AND UI to Defaults
+        predSliderValue = 1;
+        predMode = 'attend';
+        document.getElementById("pred-slider").value = 1;
+        document.getElementById("slider-val-display").innerText = "1";
+        document.getElementById("pred-attend").classList.add("active");
+        document.getElementById("pred-bunk").classList.remove("active");
+        document.getElementById("prediction-text").innerText = "Move slider to simulate.";
 
-// --- CALENDAR RENDERER ---
+        // RENDER WITH DELAY
+        setTimeout(() => {
+            initPredictionLogic(); 
+            renderAnalytics(); 
+        }, 100); 
+    }
+}
+
+// --- RENDER ANALYTICS ---
+function renderAnalytics() {
+    if(trendChart) { trendChart.destroy(); trendChart = null; }
+    if(distChart) { distChart.destroy(); distChart = null; }
+
+    const trendWrap = document.getElementById("trendWrapper");
+    const distWrap = document.getElementById("distWrapper");
+    
+    trendWrap.innerHTML = '<h3>📈 Attendance Trend</h3><div style="position:relative; height:250px; width:100%"><canvas id="trendChart"></canvas></div>';
+    distWrap.innerHTML = '<h3>🍰 Distribution</h3><div style="position:relative; height:200px; width:100%"><canvas id="distributionChart"></canvas></div>';
+
+    historyLabels = [];
+    historyData = [];
+    lastTotalClasses = 0;
+    lastPresentClasses = 0;
+    let absent = 0, holiday = 0;
+    
+    let loopDate = new Date(sessionData.startDate);
+    let today = new Date();
+    
+    while(loopDate <= today) {
+        const dStr = loopDate.toISOString().split('T')[0];
+        let status = "Present"; 
+        if(sessionExceptions[dStr] && sessionExceptions[dStr].status) status = sessionExceptions[dStr].status;
+        else if(isDefaultHoliday(dStr)) status = "Holiday";
+
+        if(status !== "Holiday") {
+            lastTotalClasses++;
+            if(status === "Present") lastPresentClasses++;
+            else absent++;
+            
+            let pct = (lastPresentClasses / lastTotalClasses) * 100;
+            historyLabels.push(dStr.substring(5)); 
+            historyData.push(pct.toFixed(1));
+        } else {
+            holiday++;
+        }
+        loopDate.setDate(loopDate.getDate() + 1);
+    }
+
+    // DRAW CHARTS
+    const ctxTrend = document.getElementById('trendChart').getContext('2d');
+    trendChart = new Chart(ctxTrend, {
+        type: 'line',
+        data: {
+            labels: [...historyLabels],
+            datasets: [
+                {
+                    label: 'History',
+                    data: [...historyData],
+                    borderColor: '#6C5CE7',
+                    backgroundColor: 'rgba(108, 92, 231, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: 'Prediction',
+                    data: [], 
+                    borderColor: '#00B894',
+                    borderDash: [5, 5],
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: '#00B894',
+                    fill: false,
+                    tension: 0.3
+                },
+                {
+                    label: 'Target',
+                    data: Array(historyLabels.length).fill(sessionData.target),
+                    borderColor: '#FF4757',
+                    borderDash: [2, 2],
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { min: 0, max: 100 } },
+            animation: false 
+        }
+    });
+
+    const ctxDist = document.getElementById('distributionChart').getContext('2d');
+    distChart = new Chart(ctxDist, {
+        type: 'doughnut',
+        data: {
+            labels: ['Present', 'Absent', 'Holidays'],
+            datasets: [{
+                data: [lastPresentClasses, absent, holiday],
+                backgroundColor: ['#00B894', '#FF4757', '#0984e3']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+    
+    updatePredictionGraph(); 
+}
+
+function initPredictionLogic() {
+    const slider = document.getElementById("pred-slider");
+    const attendBtn = document.getElementById("pred-attend");
+    const bunkBtn = document.getElementById("pred-bunk");
+    
+    // Clear old listeners
+    attendBtn.onclick = null; bunkBtn.onclick = null; slider.oninput = null;
+
+    attendBtn.onclick = () => {
+        predMode = 'attend'; 
+        attendBtn.classList.add("active");
+        bunkBtn.classList.remove("active");
+        updatePredictionText();
+        updatePredictionGraph();
+    };
+    bunkBtn.onclick = () => {
+        predMode = 'bunk'; 
+        bunkBtn.classList.add("active");
+        attendBtn.classList.remove("active");
+        updatePredictionText();
+        updatePredictionGraph();
+    };
+    
+    slider.oninput = (e) => {
+        predSliderValue = e.target.value; 
+        document.getElementById("slider-val-display").innerText = e.target.value;
+        updatePredictionText();
+        updatePredictionGraph();
+    };
+}
+
+function updatePredictionText() {
+    const sliderVal = Number(predSliderValue);
+    const isAttend = (predMode === 'attend');
+    
+    let simTotal = lastTotalClasses;
+    let simPresent = lastPresentClasses;
+    
+    for(let i=1; i<=sliderVal; i++) {
+        simTotal++;
+        if(isAttend) simPresent++;
+    }
+
+    let currentPct = lastTotalClasses === 0 ? 100 : (lastPresentClasses / lastTotalClasses) * 100;
+    let finalPct = (simPresent / simTotal) * 100;
+    let diff = finalPct - currentPct;
+    let diffStr = diff >= 0 ? `+${diff.toFixed(2)}%` : `${diff.toFixed(2)}%`;
+    let color = diff >= 0 ? "var(--success)" : "var(--danger)";
+    let actionWord = isAttend ? "attend" : "bunk";
+    
+    document.getElementById("prediction-text").innerHTML = `
+        If you <b>${actionWord}</b> next <b>${sliderVal}</b> classes:<br>
+        Result: <span class="pred-highlight">${finalPct.toFixed(2)}%</span>
+        (<span style="color:${color}">${diffStr}</span>)
+    `;
+}
+
+function updatePredictionGraph() {
+    if(!trendChart) return; 
+
+    const sliderVal = Number(predSliderValue);
+    const isAttend = (predMode === 'attend');
+    
+    let simTotal = lastTotalClasses;
+    let simPresent = lastPresentClasses;
+    
+    let futureLabels = [];
+    let plotPoints = [];
+
+    let connectPoint = 100; 
+    if(historyData.length > 0) connectPoint = historyData[historyData.length - 1];
+    plotPoints.push(connectPoint); 
+
+    let padding = [];
+    if(historyData.length > 0) padding = Array(historyData.length - 1).fill(null);
+    
+    for(let i=1; i<=sliderVal; i++) {
+        simTotal++;
+        if(isAttend) simPresent++;
+        let newPct = (simPresent / simTotal) * 100;
+        plotPoints.push(newPct.toFixed(1));
+        futureLabels.push(`+${i}`);
+    }
+
+    trendChart.data.labels = [...historyLabels, ...futureLabels];
+    trendChart.data.datasets[1].data = [...padding, ...plotPoints];
+    trendChart.data.datasets[2].data = Array(trendChart.data.labels.length).fill(sessionData.target);
+    trendChart.update('none'); 
+}
+
+// --- STANDARD FUNCTIONS ---
+document.getElementById("edit-target-btn").onclick = () => {
+    if(sessionData.status === "Ended") return showToast("Session Frozen", "error");
+    document.getElementById("target-input-field").value = sessionData.target;
+    document.getElementById("target-modal").classList.remove("hidden");
+};
+document.getElementById("cancel-target-edit").onclick = () => document.getElementById("target-modal").classList.add("hidden");
+document.getElementById("save-target-btn").onclick = async () => {
+    let val = Number(document.getElementById("target-input-field").value);
+    if(val < 1 || val > 100) return showToast("Invalid Target", "error");
+    await updateDoc(doc(db, `users/${currentUser.uid}/sessions`, currentSessionId), { target: val });
+    sessionData.target = val;
+    document.getElementById("edit-target-btn").innerText = `Target: ${val}% ✎`;
+    document.getElementById("target-modal").classList.add("hidden");
+    calculateAttendance(); 
+    showToast("Target Updated", "success");
+};
+
+// --- REAL-TIME SYNC FIX ---
+document.getElementById("back-btn").onclick = () => {
+    showScreen('dashboard');
+    loadSessions(); // FORCE RELOAD when returning to Dashboard
+};
+
 function renderCalendar() {
     const grid = document.getElementById("calendar-days");
     grid.innerHTML = "";
-    
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     document.getElementById("calendar-month-year").innerText = `${monthNames[viewDate.getMonth()]} ${viewDate.getFullYear()}`;
 
     const firstDay = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay();
     const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
 
-    // Empty Slots
-    for(let i=0; i<firstDay; i++) {
-        const div = document.createElement("div");
-        grid.appendChild(div);
-    }
+    for(let i=0; i<firstDay; i++) grid.appendChild(document.createElement("div"));
 
-    // Days
     for(let i=1; i<=daysInMonth; i++) {
         const div = document.createElement("div");
         div.className = "day-box";
@@ -230,27 +632,26 @@ function renderCalendar() {
         const endObj = sessionData.endDate ? new Date(sessionData.endDate) : new Date();
         const today = new Date();
 
-        // Future Logic
         if(currentObj < startObj || (sessionData.status === 'Ongoing' && currentObj > today) || (sessionData.status === 'Ended' && currentObj > endObj)) {
             div.classList.add("day-future");
         } else {
             let status = "Present";
+            let hasNote = false;
             if(isDefaultHoliday(dateStr)) status = "Holiday";
-            if(sessionExceptions[dateStr]) status = sessionExceptions[dateStr];
-
+            if(sessionExceptions[dateStr]) {
+                status = sessionExceptions[dateStr].status;
+                if(sessionExceptions[dateStr].note) hasNote = true;
+            }
             div.classList.add(`day-${status.toLowerCase()}`);
-            div.onclick = () => toggleDay(dateStr, status);
-        }
+            if(hasNote) div.classList.add("note-marker");
 
-        // Start Date Marker (Star)
-        if(dateStr === sessionData.startDate) {
-            div.classList.add("start-date-marker");
+            if(dateStr === sessionData.startDate) div.classList.add("start-date-marker");
+            if(sessionData.status === 'Ended' && dateStr === sessionData.endDate) div.classList.add("end-date-marker");
+
+            div.onmousedown = div.ontouchstart = () => { isLongPress = false; longPressTimer = setTimeout(() => { isLongPress = true; openNoteModal(dateStr); }, 600); };
+            div.onmouseup = div.ontouchend = (e) => { clearTimeout(longPressTimer); if(!isLongPress) toggleDay(dateStr, status); };
+            div.oncontextmenu = (e) => { e.preventDefault(); return false; };
         }
-        // End Date Marker (Flag)
-        if(sessionData.status === 'Ended' && dateStr === sessionData.endDate) {
-            div.classList.add("end-date-marker");
-        }
-        
         grid.appendChild(div);
     }
 }
@@ -265,85 +666,149 @@ function isDefaultHoliday(dateStr) {
 }
 
 async function toggleDay(dateStr, currentStatus) {
-    // LOCK EDITING IF ENDED
-    if(sessionData.status === "Ended") return alert("Session Ended. Cannot edit.");
+    if(sessionData.status === "Ended") return showToast("Session Frozen", "error");
     
     let newStatus = "Present";
     if(currentStatus === "Present") newStatus = "Absent";
     else if(currentStatus === "Absent") newStatus = "Holiday";
     else if(currentStatus === "Holiday") newStatus = "Present"; 
 
-    sessionExceptions[dateStr] = newStatus;
-    renderCalendar(); 
+    if(!sessionExceptions[dateStr]) sessionExceptions[dateStr] = {};
+    sessionExceptions[dateStr].status = newStatus;
+    renderCalendar();
+    calculateAttendance();
 
     const ref = doc(db, `users/${currentUser.uid}/sessions/${currentSessionId}/exceptions`, dateStr);
-    if(newStatus === "Present") {
+    const dataToSave = { status: newStatus };
+    if(sessionExceptions[dateStr].note) dataToSave.note = sessionExceptions[dateStr].note;
+
+    if(newStatus === "Present" && !dataToSave.note) {
         if(isDefaultHoliday(dateStr)) await setDoc(ref, { status: "Present" });
         else await deleteDoc(ref);
+        if(!isDefaultHoliday(dateStr)) delete sessionExceptions[dateStr];
     } else {
-        await setDoc(ref, { status: newStatus });
+        await setDoc(ref, dataToSave);
     }
 }
 
-// Nav Buttons
-document.getElementById("prev-month-btn").onclick = () => {
-    if(viewDate.getFullYear() === 2026 && viewDate.getMonth() === 0) return;
-    viewDate.setMonth(viewDate.getMonth() - 1);
+function openNoteModal(dateStr) {
+    selectedDateForNote = dateStr;
+    const modal = document.getElementById("note-modal");
+    document.getElementById("note-date-display").innerText = `Note for ${dateStr}`;
+    const input = document.getElementById("note-input-area");
+    input.value = (sessionExceptions[dateStr] && sessionExceptions[dateStr].note) ? sessionExceptions[dateStr].note : "";
+    modal.classList.remove("hidden");
+    input.focus();
+}
+
+document.getElementById("save-note-btn").onclick = async () => {
+    const text = document.getElementById("note-input-area").value;
+    const dateStr = selectedDateForNote;
+    if(!sessionExceptions[dateStr]) sessionExceptions[dateStr] = { status: "Absent" }; 
+    sessionExceptions[dateStr].note = text;
+    await setDoc(doc(db, `users/${currentUser.uid}/sessions/${currentSessionId}/exceptions`, dateStr), sessionExceptions[dateStr]);
+    document.getElementById("note-modal").classList.add("hidden");
     renderCalendar();
-};
-document.getElementById("next-month-btn").onclick = () => {
-    if(viewDate.getFullYear() === 2027 && viewDate.getMonth() === 11) return;
-    viewDate.setMonth(viewDate.getMonth() + 1);
-    renderCalendar();
+    showToast("Note Saved", "success");
 };
 
-document.getElementById("check-btn").onclick = () => {
-    document.getElementById("check-btn").innerText = "Calculating...";
-    let totalWorkingDays = 0;
-    let daysPresent = 0;
+document.getElementById("delete-note-btn").onclick = async () => {
+    const dateStr = selectedDateForNote;
+    if(sessionExceptions[dateStr]) {
+        delete sessionExceptions[dateStr].note;
+        await setDoc(doc(db, `users/${currentUser.uid}/sessions/${currentSessionId}/exceptions`, dateStr), sessionExceptions[dateStr]);
+    }
+    document.getElementById("note-modal").classList.add("hidden");
+    renderCalendar();
+    showToast("Note Deleted", "success");
+};
+document.getElementById("close-note-modal").onclick = () => document.getElementById("note-modal").classList.add("hidden");
+
+// --- CALCULATIONS ---
+function calculateAttendance() {
+    let total = 0, present = 0;
     let loopDate = new Date(sessionData.startDate);
     const stopDate = sessionData.endDate ? new Date(sessionData.endDate) : new Date();
 
     while(loopDate <= stopDate) {
         const dStr = loopDate.toISOString().split('T')[0];
         let status = "Present";
-        if(isDefaultHoliday(dStr)) status = "Holiday";
-        if(sessionExceptions[dStr]) status = sessionExceptions[dStr];
+        if(sessionExceptions[dStr] && sessionExceptions[dStr].status) status = sessionExceptions[dStr].status;
+        else if(isDefaultHoliday(dStr)) status = "Holiday";
 
         if(status !== "Holiday") {
-            totalWorkingDays++;
-            if(status === "Present") daysPresent++;
+            total++;
+            if(status === "Present") present++;
         }
         loopDate.setDate(loopDate.getDate() + 1);
     }
     
-    // EXACT CALCULATION
-    let percent = 100;
-    if(totalWorkingDays > 0) {
-        percent = (daysPresent / totalWorkingDays) * 100;
-    }
-    // Show 2 decimal places (e.g., 85.71%)
+    let percent = total === 0 ? 100 : (present / total) * 100;
     document.getElementById("attendance-percent").innerText = `${percent.toFixed(2)}%`;
-    document.getElementById("check-btn").innerText = "Check Attendance";
+    updateBunkCard(present, total, percent, sessionData.target);
+}
+
+function updateBunkCard(P, N, currentPct, T_pct) {
+    const card = document.getElementById("bunk-status-card");
+    const T = T_pct / 100;
+    card.className = "bunk-card"; 
+    
+    if(currentPct < T_pct) {
+        let R = Math.ceil((T*N - P) / (1-T));
+        if(R < 0) R = 0;
+        card.classList.add("danger");
+        card.innerHTML = `<span>🚨 <b>Danger!</b> Below Target.<br>Attend next <b>${R} classes</b> to recover.</span>`;
+    }
+    else if ((P / (N+1)) >= T) {
+        let B = Math.floor(P/T - N);
+        card.classList.add("safe");
+        card.innerHTML = `<span>☕ <b>Safe Zone.</b><br>You can bunk <b>${B} classes</b> safely.</span>`;
+    }
+    else {
+        let D = Math.ceil((T*N + T - P) / (1-T));
+        card.classList.add("buffer");
+        card.innerHTML = `<span>🛡️ <b>On Track.</b> No bunks yet.<br>Attend <b>${D} more</b> to earn a bunk.</span>`;
+    }
+}
+
+document.getElementById("notebook-btn").onclick = () => {
+    const list = document.getElementById("notebook-list");
+    list.innerHTML = "";
+    let hasNotes = false;
+    Object.keys(sessionExceptions).sort().forEach(date => {
+        if(sessionExceptions[date].note) {
+            hasNotes = true;
+            list.innerHTML += `
+                <div class="notebook-item" onclick="jumpToDate('${date}')">
+                    <div class="notebook-date">${date}</div>
+                    <div class="notebook-text">${sessionExceptions[date].note}</div>
+                </div>`;
+        }
+    });
+    if(!hasNotes) list.innerHTML = "<p style='padding:20px; color:#999; text-align:center;'>No notes found.</p>";
+    document.getElementById("notebook-hub-modal").classList.remove("hidden");
+};
+document.getElementById("close-notebook").onclick = () => document.getElementById("notebook-hub-modal").classList.add("hidden");
+window.jumpToDate = (date) => {
+    document.getElementById("notebook-hub-modal").classList.add("hidden");
+    const d = new Date(date);
+    viewDate = new Date(d.getFullYear(), d.getMonth(), 1);
+    renderCalendar();
 };
 
-// END SESSION
+document.getElementById("prev-month-btn").onclick = () => { viewDate.setMonth(viewDate.getMonth() - 1); renderCalendar(); };
+document.getElementById("next-month-btn").onclick = () => { viewDate.setMonth(viewDate.getMonth() + 1); renderCalendar(); };
+
 document.getElementById("end-session-btn").onclick = () => document.getElementById("end-modal").classList.remove("hidden");
 document.getElementById("cancel-end").onclick = () => document.getElementById("end-modal").classList.add("hidden");
 document.getElementById("confirm-end").onclick = async () => {
     const date = document.getElementById("end-session-date").value;
     if(!date) return;
-    if(new Date(date) < new Date(sessionData.startDate)) return alert("Invalid date");
     await updateDoc(doc(db, `users/${currentUser.uid}/sessions`, currentSessionId), { endDate: date, status: "Ended" });
     document.getElementById("end-modal").classList.add("hidden");
     loadSessions();
     showScreen('dashboard');
 };
-
-function showScreen(id) {
-    Object.values(screens).forEach(s => s.classList.add("hidden"));
-    screens[id].classList.remove("hidden");
-}
 
 async function checkAdmin() {
     const docSnap = await getDoc(doc(db, "users", currentUser.uid));
@@ -357,7 +822,11 @@ async function checkAdmin() {
             list.innerHTML = "";
             allUsers.forEach(u => {
                 const d = u.data();
-                list.innerHTML += `<div style="border-bottom:1px solid #eee; padding:5px;"><b>${d.name}</b><br><small>${d.email}</small></div>`;
+                const pic = d.photo ? d.photo : "https://via.placeholder.com/30";
+                list.innerHTML += `<div style="border-bottom:1px solid #eee; padding:10px; display:flex; align-items:center; gap:10px;">
+                        <img src="${pic}" style="width:30px; height:30px; border-radius:50%; object-fit:cover;">
+                        <div><b>${d.name}</b><br><small>${d.email}</small></div>
+                    </div>`;
             });
         };
         document.getElementById("close-admin").onclick = () => document.getElementById("admin-modal").classList.add("hidden");
