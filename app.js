@@ -51,21 +51,27 @@ function showToast(msg, type="error") {
     setTimeout(() => toast.remove(), 3000);
 }
 
-// --- THEME CYCLER ---
+// --- NEW: THEME CYCLER (Light -> Dark -> Midnight -> Sepia) ---
 const themeBtns = document.querySelectorAll(".theme-toggle");
 const themes = ["light", "dark", "midnight", "sepia"];
 
+// 1. Load saved theme
 let currentTheme = localStorage.getItem("theme") || "light";
 document.body.setAttribute("data-theme", currentTheme);
 updateThemeIcon(currentTheme);
 
 themeBtns.forEach(btn => {
     btn.onclick = () => {
+        // 2. Find current index and get next one
         let index = themes.indexOf(currentTheme);
-        index = (index + 1) % themes.length; 
+        index = (index + 1) % themes.length; // Loops back to 0
+        
+        // 3. Apply new theme
         currentTheme = themes[index];
         document.body.setAttribute("data-theme", currentTheme);
         localStorage.setItem("theme", currentTheme);
+        
+        // 4. Update the Icon
         updateThemeIcon(currentTheme);
     };
 });
@@ -116,7 +122,7 @@ if(loginBtn) {
         if(isSetupMode && !nameInput) return showToast("Please confirm your name", "error");
 
         signInWithPopup(auth, provider).then(async (result) => {
-            showScreen('splash'); 
+            showScreen('splash'); // Immediate Splash
 
             if(isSetupMode || nameInput) {
                 await setDoc(doc(db, "users", result.user.uid), {
@@ -353,7 +359,6 @@ function switchTab(tabName) {
     }
 }
 
-// --- FIXED RENDER ANALYTICS ---
 function renderAnalytics() {
     if(trendChart) trendChart.destroy();
     if(distChart) distChart.destroy();
@@ -363,13 +368,13 @@ function renderAnalytics() {
     
     let loopDate = new Date(sessionData.startDate);
     
-    // --- FIX APPLIED HERE ---
-    // If session is ended, stop at endDate. If ongoing, stop at today.
-    let stopDate = new Date(); // Default Today
-    if (sessionData.status === 'Ended' && sessionData.endDate) {
-        stopDate = new Date(sessionData.endDate); // Stop at Frozen Date
+    // --- FIX START ---
+    let stopDate = new Date(); // Default to Today
+    // If the session is Ended, stop calculating at the endDate
+    if(sessionData.status === 'Ended' && sessionData.endDate) {
+        stopDate = new Date(sessionData.endDate);
     }
-    // ------------------------
+    // --- FIX END ---
 
     while(loopDate <= stopDate) {
         const dStr = loopDate.toISOString().split('T')[0];
@@ -383,7 +388,7 @@ function renderAnalytics() {
             if(status === "Present") present++;
             else absent++;
             
-            let pct = total === 0 ? 0 : (present / total) * 100;
+            let pct = (present / total) * 100;
             labels.push(dStr.substring(5)); 
             dataPoints.push(pct.toFixed(1));
         } else {
@@ -414,7 +419,6 @@ function renderAnalytics() {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
             scales: { y: { min: 0, max: 100 } }
         }
     });
@@ -428,10 +432,6 @@ function renderAnalytics() {
                 data: [present, absent, holiday],
                 backgroundColor: ['#00B894', '#FF4757', '#0984e3']
             }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false
         }
     });
 }
@@ -573,12 +573,7 @@ document.getElementById("close-note-modal").onclick = () => document.getElementB
 function calculateAttendance() {
     let total = 0, present = 0;
     let loopDate = new Date(sessionData.startDate);
-    
-    // FIX applied here too just in case, though usually sessionData.endDate handles it if loop stops
-    let stopDate = new Date();
-    if(sessionData.status === 'Ended' && sessionData.endDate) {
-        stopDate = new Date(sessionData.endDate);
-    }
+    const stopDate = sessionData.endDate ? new Date(sessionData.endDate) : new Date();
 
     while(loopDate <= stopDate) {
         const dStr = loopDate.toISOString().split('T')[0];
@@ -628,11 +623,7 @@ document.getElementById("notebook-btn").onclick = () => {
     Object.keys(sessionExceptions).sort().forEach(date => {
         if(sessionExceptions[date].note) {
             hasNotes = true;
-            list.innerHTML += `
-                <div class="notebook-item" onclick="jumpToDate('${date}')">
-                    <div class="notebook-date">${date}</div>
-                    <div class="notebook-text">${sessionExceptions[date].note}</div>
-                </div>`;
+            list.innerHTML += `<br>                <div class="notebook-item" onclick="jumpToDate('${date}')"><br>                    <div class="notebook-date">${date}</div><br>                    <div class="notebook-text">${sessionExceptions[date].note}</div><br>                </div>`;
         }
     });
     if(!hasNotes) list.innerHTML = "<p style='padding:20px; color:#999; text-align:center;'>No notes found.</p>";
@@ -673,10 +664,7 @@ async function checkAdmin() {
             allUsers.forEach(u => {
                 const d = u.data();
                 const pic = d.photo ? d.photo : "https://via.placeholder.com/30";
-                list.innerHTML += `<div style="border-bottom:1px solid #eee; padding:10px; display:flex; align-items:center; gap:10px;">
-                        <img src="${pic}" style="width:30px; height:30px; border-radius:50%; object-fit:cover;">
-                        <div><b>${d.name}</b><br><small>${d.email}</small></div>
-                    </div>`;
+                list.innerHTML += `<div style="border-bottom:1px solid #eee; padding:10px; display:flex; align-items:center; gap:10px;"><br>                        <img src="${pic}" style="width:30px; height:30px; border-radius:50%; object-fit:cover;"><br>                        <div><b>${d.name}</b><br><small>${d.email}</small></div><br>                    </div>`;
             });
         };
         document.getElementById("close-admin").onclick = () => document.getElementById("admin-modal").classList.add("hidden");
