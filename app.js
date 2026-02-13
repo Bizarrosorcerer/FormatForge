@@ -15,13 +15,14 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Attempt persistence silently
-enableIndexedDbPersistence(db).catch((err) => {});
+enableIndexedDbPersistence(db).catch((err) => {
+    console.log("Persistence error:", err.code);
+});
+
 const provider = new GoogleAuthProvider();
 
 // --- VARIABLES ---
 let currentUser = null;
-let targetUid = null;
 let currentSessionId = null;
 let sessionExceptions = {}; 
 let sessionData = null; 
@@ -31,18 +32,8 @@ let isLongPress = false;
 let selectedDateForNote = null;
 let trendChart = null; 
 let distChart = null; 
+
 const fixedHolidays = ["-01-01", "-01-26", "-08-15", "-10-02", "-12-25"];
-window.globalHolidaysCache = []; 
-
-// PERSISTENCE GLOBALS
-let predSliderValue = 1;
-let predMode = 'attend'; 
-
-// CHARTS
-let historyLabels = [];
-let historyData = [];
-let lastTotalClasses = 0;
-let lastPresentClasses = 0;
 
 const screens = {
     splash: document.getElementById("splash-screen"),
@@ -60,9 +51,10 @@ function showToast(msg, type="error") {
     setTimeout(() => toast.remove(), 3000);
 }
 
-// --- THEME ---
+// --- THEME CYCLER ---
 const themeBtns = document.querySelectorAll(".theme-toggle");
 const themes = ["light", "dark", "midnight", "sepia"];
+
 let currentTheme = localStorage.getItem("theme") || "light";
 document.body.setAttribute("data-theme", currentTheme);
 updateThemeIcon(currentTheme);
@@ -75,76 +67,37 @@ themeBtns.forEach(btn => {
         document.body.setAttribute("data-theme", currentTheme);
         localStorage.setItem("theme", currentTheme);
         updateThemeIcon(currentTheme);
-        if(!document.getElementById("view-insights").classList.contains("hidden")) {
-            renderAnalytics();
-        }
     };
 });
 
 function updateThemeIcon(theme) {
-    const icons = { "light": "☀️", "dark": "🌙", "midnight": "🖤", "sepia": "📖" };
+    const icons = {
+        "light": "☀️",
+        "dark": "🌙",
+        "midnight": "🖤",
+        "sepia": "📖"
+    };
     themeBtns.forEach(btn => btn.innerText = icons[theme]);
 }
 
-// --- AUTH (FIXED FOR DATABASE ERRORS) ---
+// --- AUTH & SPLASH ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        // 1. SET USER IMMEDIATELY (Don't wait for DB)
         currentUser = user;
-        targetUid = user.uid;
+        const userDoc = await getDoc(doc(db, "users", user.uid));
         
-        // 2. Try to Sync User Profile (SILENTLY)
-        // If this fails due to permissions, we catch it and ignore it so dashboard still loads
-        try {
-            const userRef = doc(db, "users", user.uid);
-            const userDoc = await getDoc(userRef);
-            
-            if (userDoc.exists()) {
-                if(userDoc.data().isBanned) {
-                    await signOut(auth);
-                    alert("Banned.");
-                    showScreen('login');
-                    return;
-                }
-                loadProfile(userDoc.data());
-                
-                // Auto-Admin Attempt (Silent)
-                if(!userDoc.data().isAdmin) {
-                    updateDoc(userRef, { isAdmin: true }).catch(() => console.log("Admin auto-grant blocked by rules"));
-                }
-            } else {
-                // Create User
-                setDoc(userRef, {
-                    name: user.displayName || "Student",
-                    email: user.email,
-                    photo: user.photoURL,
-                    isAdmin: true, 
-                    isBanned: false
-                }, { merge: true }).catch(() => console.log("User creation blocked by rules"));
-            }
-        } catch (e) {
-            console.log("Profile sync issue (Ignored to allow access):", e);
+        if (userDoc.exists() && userDoc.data().name) {
+            loadProfile(userDoc.data());
+            loadSessions();
+            checkAdmin();
+            setTimeout(() => showScreen('dashboard'), 500); 
+        } else {
+            if(user.displayName) document.getElementById("display-name-input").value = user.displayName;
+            document.getElementById("first-time-setup").classList.remove("hidden");
+            showScreen('login');
         }
-
-        // 3. LOAD DATA (Parallel)
-        // We attempt to load sessions regardless of profile success
-        try {
-            await Promise.all([
-                loadSessions(),
-                checkAdmin(),
-                checkGlobalAnnouncements(),
-                loadGlobalHolidays()
-            ]);
-        } catch(e) {
-            console.log("Data load partial fail", e);
-        }
-
-        // 4. SHOW DASHBOARD ALWAYS
-        setTimeout(() => showScreen('dashboard'), 500); 
-
     } else {
         currentUser = null;
-        targetUid = null;
         document.getElementById("first-time-setup").classList.add("hidden");
         setTimeout(() => showScreen('login'), 500); 
     }
@@ -158,9 +111,24 @@ function showScreen(id) {
 const loginBtn = document.getElementById("login-btn");
 if(loginBtn) {
     loginBtn.addEventListener("click", () => {
-        signInWithPopup(auth, provider).catch(err => {
-            console.log(err);
-            showToast("Login failed.");
+        const isSetupMode = !document.getElementById("first-time-setup").classList.contains("hidden");
+        const nameInput = document.getElementById("display-name-input").value;
+        if(isSetupMode && !nameInput) return showToast("Please confirm your name", "error");
+
+        signInWithPopup(auth, provider).then(async (result) => {
+            showScreen('splash'); 
+
+            if(isSetupMode || nameInput) {
+                await setDoc(doc(db, "users", result.user.uid), {
+                    name: nameInput || result.user.displayName,
+                    email: result.user.email,
+                    photo: null 
+                }, { merge: true });
+            }
+        }).catch(err => {
+            console.error(err);
+            showToast("Login failed. Try again.");
+            showScreen('login');
         });
     });
 }
@@ -172,7 +140,6 @@ document.getElementById("logout-btn").addEventListener("click", () => {
 
 // --- PROFILE ---
 function loadProfile(data) {
-    if(!data) return;
     document.getElementById("user-name-text").innerText = data.name;
     document.getElementById("user-email").innerText = data.email;
     const img = document.getElementById("profile-img");
@@ -180,33 +147,21 @@ function loadProfile(data) {
     const placeholder = document.getElementById("profile-placeholder");
     const gear = document.getElementById("profile-gear");
 
-    if(targetUid !== currentUser.uid) {
-        wrapper.onclick = null;
-        gear.classList.add("hidden");
-        document.getElementById("edit-name-btn").classList.add("hidden");
-    } else {
-        document.getElementById("edit-name-btn").classList.remove("hidden");
-    }
-
     if(data.photo) {
         img.src = data.photo;
         img.classList.remove("hidden");
         placeholder.classList.add("hidden");
-        if(targetUid === currentUser.uid) {
-            gear.classList.remove("hidden");
-            wrapper.onclick = () => {
-                document.getElementById("modal-profile-preview").src = data.photo;
-                document.getElementById("profile-options-modal").classList.remove("hidden");
-            };
-        }
+        gear.classList.remove("hidden");
+        wrapper.onclick = () => {
+            document.getElementById("modal-profile-preview").src = data.photo;
+            document.getElementById("profile-options-modal").classList.remove("hidden");
+        };
     } else {
         img.src = "";
         img.classList.add("hidden");
         placeholder.classList.remove("hidden");
-        if(targetUid === currentUser.uid) {
-            gear.classList.add("hidden");
-            wrapper.onclick = () => document.getElementById("profile-upload").click();
-        }
+        gear.classList.add("hidden");
+        wrapper.onclick = () => document.getElementById("profile-upload").click();
     }
 }
 
@@ -214,12 +169,10 @@ document.getElementById("edit-name-btn").onclick = () => document.getElementById
 document.getElementById("save-name-btn").onclick = async () => {
     const newName = document.getElementById("edit-name-input").value;
     if(!newName) return;
-    try {
-        await updateDoc(doc(db, "users", targetUid), { name: newName });
-        document.getElementById("user-name-text").innerText = newName;
-        document.getElementById("edit-name-modal").classList.add("hidden");
-        showToast("Name Updated", "success");
-    } catch(e) { showToast("Update Failed (Permission Denied)", "error"); }
+    await updateDoc(doc(db, "users", currentUser.uid), { name: newName });
+    document.getElementById("user-name-text").innerText = newName;
+    document.getElementById("edit-name-modal").classList.add("hidden");
+    showToast("Name Updated", "success");
 };
 document.getElementById("cancel-edit-name").onclick = () => document.getElementById("edit-name-modal").classList.add("hidden");
 
@@ -229,14 +182,13 @@ document.getElementById("btn-replace-photo").onclick = () => {
 };
 document.getElementById("btn-remove-photo").onclick = async () => {
     document.getElementById("profile-options-modal").classList.add("hidden");
-    try {
-        await updateDoc(doc(db, "users", targetUid), { photo: null });
-        const userDoc = await getDoc(doc(db, "users", targetUid));
-        loadProfile(userDoc.data());
-        showToast("Photo Removed", "success");
-    } catch(e) { showToast("Update Failed (Permission Denied)", "error"); }
+    await updateDoc(doc(db, "users", currentUser.uid), { photo: null });
+    const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+    loadProfile(userDoc.data());
+    showToast("Photo Removed", "success");
 };
 document.getElementById("close-profile-options").onclick = () => document.getElementById("profile-options-modal").classList.add("hidden");
+
 document.getElementById("profile-upload").onchange = async (e) => {
     const file = e.target.files[0];
     if(!file) return;
@@ -244,12 +196,10 @@ document.getElementById("profile-upload").onchange = async (e) => {
     const reader = new FileReader();
     reader.onload = async function(evt) {
         const base64 = evt.target.result;
-        try {
-            await updateDoc(doc(db, "users", targetUid), { photo: base64 });
-            const userDoc = await getDoc(doc(db, "users", targetUid));
-            loadProfile(userDoc.data());
-            showToast("Photo Updated", "success");
-        } catch(e) { showToast("Update Failed (Permission Denied)", "error"); }
+        await updateDoc(doc(db, "users", currentUser.uid), { photo: base64 });
+        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+        loadProfile(userDoc.data());
+        showToast("Photo Updated", "success");
     };
     reader.readAsDataURL(file);
 };
@@ -259,90 +209,47 @@ async function loadSessions() {
     const container = document.getElementById("sessions-container");
     container.innerHTML = "<p>Loading...</p>";
     
-    try {
-        const q = query(collection(db, `users/${targetUid}/sessions`));
-        const snapshot = await getDocs(q);
-        const sessionsList = [];
+    const q = query(collection(db, `users/${currentUser.uid}/sessions`));
+    const snapshot = await getDocs(q);
+    const sessionsList = [];
 
-        // Safe Load Logic
-        const allPromises = snapshot.docs.map(async (docSnap) => {
-            const data = docSnap.data();
-            let exceptions = {};
-            try {
-                const excSnap = await getDocs(collection(db, `users/${targetUid}/sessions/${docSnap.id}/exceptions`));
-                excSnap.forEach(d => exceptions[d.id] = d.data().status);
-            } catch(e) {}
-            
-            let total = 0, present = 0;
-            let loopDate = new Date(data.startDate);
-            let today = new Date();
-            while(loopDate <= today) {
-                let dStr = loopDate.toISOString().split('T')[0];
-                let status = "Present"; 
-                if(exceptions[dStr]) status = exceptions[dStr];
-                else if(isDefaultHoliday(dStr)) status = "Holiday";
-
-                if(status !== "Holiday") {
-                    total++;
-                    if(status === "Present") present++;
-                }
-                loopDate.setDate(loopDate.getDate() + 1);
-            }
-            let percent = total === 0 ? 100 : Math.round((present / total) * 100);
-
-            sessionsList.push({ id: docSnap.id, ...data, percent: percent });
+    snapshot.forEach(docSnap => {
+        sessionsList.push({
+            id: docSnap.id,
+            ...docSnap.data()
         });
+    });
 
-        await Promise.all(allPromises);
+    sessionsList.sort((a, b) => {
+        const orderA = a.sortOrder !== undefined ? a.sortOrder : 0; 
+        const orderB = b.sortOrder !== undefined ? b.sortOrder : 0;
+        if (orderA !== orderB) return orderB - orderA; 
+        return new Date(b.startDate) - new Date(a.startDate);
+    });
 
-        sessionsList.sort((a, b) => {
-            const orderA = a.sortOrder !== undefined ? a.sortOrder : 0; 
-            const orderB = b.sortOrder !== undefined ? b.sortOrder : 0;
-            if (orderA !== orderB) return orderB - orderA; 
-            return new Date(b.startDate) - new Date(a.startDate);
-        });
-
-        container.innerHTML = "";
-        if(sessionsList.length === 0) {
-            container.innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>No sessions yet.<br>Click + New to start.</p>";
-            return;
-        }
-
-        sessionsList.forEach(session => {
-            const div = document.createElement("div");
-            div.className = "session-card";
-            const statusClass = session.status === 'Ongoing' ? 'ongoing' : 'ended';
-            
-            let ringColor = "var(--success)";
-            if(session.percent < session.target) ringColor = "var(--danger)";
-            else if(session.percent < session.target + 10) ringColor = "#F1C40F";
-
-            div.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <div class="card-title-row" style="flex:1;">
-                        <h3>${session.name}</h3>
-                        <div style="display:flex; gap:8px;">
-                            <span class="status-badge ${statusClass}">${session.status}</span>
-                        </div>
-                        <p style="margin:5px 0 0; font-size:0.8em; color:var(--text-sub);">Started: ${session.startDate}</p>
-                    </div>
-                    
-                    <div class="progress-ring-container">
-                        <div class="progress-ring" style="--p: ${session.percent}%; --accent: ${ringColor}">
-                            <span class="progress-text">${session.percent}%</span>
-                        </div>
-                    </div>
-                </div>
-                <button class="delete-session-icon" style="position:absolute; top:10px; right:10px; opacity:0.3;" onclick="event.stopPropagation(); confirmDeleteSession('${session.id}', '${session.name}')">🗑️</button>
-            `;
-            div.onclick = () => openSession(session.id, session);
-            container.appendChild(div);
-        });
-    } catch(e) {
-        console.error(e);
-        // Fallback for empty/error state
-        container.innerHTML = "<p style='text-align:center; padding:20px; color:red'>Sessions Failed to Load.<br>Database permissions may be locked.</p>";
+    container.innerHTML = "";
+    if(sessionsList.length === 0) {
+        container.innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>No sessions yet.<br>Click + New to start.</p>";
+        return;
     }
+
+    sessionsList.forEach(session => {
+        const div = document.createElement("div");
+        div.className = "session-card";
+        const statusClass = session.status === 'Ongoing' ? 'ongoing' : 'ended';
+        div.innerHTML = `
+            <div class="card-header">
+                <div class="card-title-row">
+                    <h3>${session.name}</h3>
+                    <span class="status-badge ${statusClass}">${session.status}</span>
+                </div>
+                <button class="delete-session-icon" onclick="event.stopPropagation(); confirmDeleteSession('${session.id}', '${session.name}')">🗑️</button>
+            </div>
+            <p>Started: ${session.startDate}</p>
+        `;
+        div.onclick = () => openSession(session.id, session);
+        container.appendChild(div);
+    });
 }
 
 window.confirmDeleteSession = (id, name) => {
@@ -350,16 +257,15 @@ window.confirmDeleteSession = (id, name) => {
     document.getElementById("del-session-name").innerText = name;
     modal.classList.remove("hidden");
     document.getElementById("confirm-delete").onclick = async () => {
-        try {
-            await deleteDoc(doc(db, `users/${targetUid}/sessions`, id));
-            modal.classList.add("hidden");
-            showToast("Session deleted", "success");
-            loadSessions();
-        } catch(e) { showToast("Delete Failed (Permission Denied)", "error"); }
+        await deleteDoc(doc(db, `users/${currentUser.uid}/sessions`, id));
+        modal.classList.add("hidden");
+        showToast("Session deleted", "success");
+        loadSessions();
     };
 };
 document.getElementById("cancel-delete").onclick = () => document.getElementById("delete-confirm-modal").classList.add("hidden");
 
+// --- CREATE SESSION ---
 document.getElementById("add-session-fab").onclick = () => {
     document.getElementById("new-session-name").value = "";
     document.getElementById("new-session-date").value = "";
@@ -367,7 +273,9 @@ document.getElementById("add-session-fab").onclick = () => {
     document.getElementById("new-session-position").value = "top"; 
     document.getElementById("create-modal").classList.remove("hidden");
 };
+
 document.getElementById("cancel-create").onclick = () => document.getElementById("create-modal").classList.add("hidden");
+
 document.getElementById("confirm-create").onclick = async () => {
     const name = document.getElementById("new-session-name").value.trim();
     const date = document.getElementById("new-session-date").value;
@@ -377,28 +285,31 @@ document.getElementById("confirm-create").onclick = async () => {
     if(!name || !date) return showToast("Fill all fields");
     if(!target) target = 75; 
 
-    try {
-        const q = query(collection(db, `users/${targetUid}/sessions`), where("name", "==", name));
-        const existingCheck = await getDocs(q);
-        if (!existingCheck.empty) return showToast("Session name already exists!", "error");
+    // DUPLICATE CHECK
+    const q = query(
+        collection(db, `users/${currentUser.uid}/sessions`), 
+        where("name", "==", name)
+    );
+    const existingCheck = await getDocs(q);
+    if (!existingCheck.empty) return showToast("Session name already exists!", "error");
 
-        let orderValue = Date.now(); 
-        if(position === 'bottom') orderValue = -Date.now();
+    let orderValue = Date.now(); 
+    if(position === 'bottom') orderValue = -Date.now();
 
-        await addDoc(collection(db, `users/${targetUid}/sessions`), {
-            name: name,
-            startDate: date,
-            endDate: null,
-            status: "Ongoing",
-            target: Number(target),
-            sortOrder: orderValue, 
-            createdAt: Date.now()
-        });
-        document.getElementById("create-modal").classList.add("hidden");
-        loadSessions();
-    } catch(e) { showToast("Create Failed (Permission Denied)", "error"); }
+    await addDoc(collection(db, `users/${currentUser.uid}/sessions`), {
+        name: name,
+        startDate: date,
+        endDate: null,
+        status: "Ongoing",
+        target: Number(target),
+        sortOrder: orderValue, 
+        createdAt: Date.now()
+    });
+    document.getElementById("create-modal").classList.add("hidden");
+    loadSessions();
 };
 
+// --- SESSION DETAIL ---
 async function openSession(sessId, data) {
     currentSessionId = sessId;
     sessionData = data;
@@ -412,13 +323,10 @@ async function openSession(sessId, data) {
     if(data.status === "Ended") document.getElementById("end-session-btn").classList.add("hidden");
     else document.getElementById("end-session-btn").classList.remove("hidden");
 
-    try {
-        const snap = await getDocs(collection(db, `users/${targetUid}/sessions/${sessId}/exceptions`));
-        snap.forEach(d => { sessionExceptions[d.id] = d.data(); });
-    } catch(e) {}
+    const snap = await getDocs(collection(db, `users/${currentUser.uid}/sessions/${sessId}/exceptions`));
+    snap.forEach(d => { sessionExceptions[d.id] = d.data(); });
 
     viewDate = new Date(); 
-    
     switchTab('calendar');
     renderCalendar();
     calculateAttendance(); 
@@ -441,104 +349,73 @@ function switchTab(tabName) {
         document.getElementById("view-insights").classList.remove("hidden");
         tabCal.classList.remove("active");
         tabIns.classList.add("active");
-        
-        // RESET PREDICTOR
-        predSliderValue = 1;
-        predMode = 'attend';
-        document.getElementById("pred-slider").value = 1;
-        document.getElementById("slider-val-display").innerText = "1";
-        document.getElementById("pred-attend").classList.add("active");
-        document.getElementById("pred-bunk").classList.remove("active");
-        document.getElementById("prediction-text").innerText = "Move slider to simulate.";
-
-        setTimeout(() => {
-            initPredictionLogic(); 
-            renderAnalytics(); 
-        }, 100); 
+        renderAnalytics(); 
     }
 }
 
-// --- RENDER ANALYTICS ---
+// --- FIXED RENDER ANALYTICS ---
 function renderAnalytics() {
-    if(trendChart) { trendChart.destroy(); trendChart = null; }
-    if(distChart) { distChart.destroy(); distChart = null; }
+    if(trendChart) trendChart.destroy();
+    if(distChart) distChart.destroy();
 
-    const trendWrap = document.getElementById("trendWrapper");
-    const distWrap = document.getElementById("distWrapper");
-    
-    trendWrap.innerHTML = '<h3>📈 Attendance Trend</h3><div style="position:relative; height:250px; width:100%"><canvas id="trendChart"></canvas></div>';
-    distWrap.innerHTML = '<h3>🍰 Distribution</h3><div style="position:relative; height:200px; width:100%"><canvas id="distributionChart"></canvas></div>';
-
-    historyLabels = [];
-    historyData = [];
-    lastTotalClasses = 0;
-    lastPresentClasses = 0;
-    let absent = 0, holiday = 0;
+    let total = 0, present = 0, absent = 0, holiday = 0;
+    let labels = [], dataPoints = [];
     
     let loopDate = new Date(sessionData.startDate);
-    let today = new Date();
     
-    while(loopDate <= today) {
+    // --- FIX APPLIED HERE ---
+    // If session is ended, stop at endDate. If ongoing, stop at today.
+    let stopDate = new Date(); // Default Today
+    if (sessionData.status === 'Ended' && sessionData.endDate) {
+        stopDate = new Date(sessionData.endDate); // Stop at Frozen Date
+    }
+    // ------------------------
+
+    while(loopDate <= stopDate) {
         const dStr = loopDate.toISOString().split('T')[0];
         let status = "Present"; 
+        
         if(sessionExceptions[dStr] && sessionExceptions[dStr].status) status = sessionExceptions[dStr].status;
         else if(isDefaultHoliday(dStr)) status = "Holiday";
 
         if(status !== "Holiday") {
-            lastTotalClasses++;
-            if(status === "Present") lastPresentClasses++;
+            total++;
+            if(status === "Present") present++;
             else absent++;
             
-            let pct = (lastPresentClasses / lastTotalClasses) * 100;
-            historyLabels.push(dStr.substring(5)); 
-            historyData.push(pct.toFixed(1));
+            let pct = total === 0 ? 0 : (present / total) * 100;
+            labels.push(dStr.substring(5)); 
+            dataPoints.push(pct.toFixed(1));
         } else {
             holiday++;
         }
         loopDate.setDate(loopDate.getDate() + 1);
     }
 
-    // Default Prediction Text (Reset State)
-    updatePredictionText(); 
-
     const ctxTrend = document.getElementById('trendChart').getContext('2d');
     trendChart = new Chart(ctxTrend, {
         type: 'line',
         data: {
-            labels: [...historyLabels],
-            datasets: [
-                {
-                    label: 'History',
-                    data: [...historyData],
-                    borderColor: '#6C5CE7',
-                    backgroundColor: 'rgba(108, 92, 231, 0.1)',
-                    fill: true,
-                    tension: 0.3
-                },
-                {
-                    label: 'Prediction',
-                    data: [], 
-                    borderColor: '#00B894',
-                    borderDash: [5, 5],
-                    pointBackgroundColor: '#fff',
-                    pointBorderColor: '#00B894',
-                    fill: false,
-                    tension: 0.3
-                },
-                {
-                    label: 'Target',
-                    data: Array(historyLabels.length).fill(sessionData.target),
-                    borderColor: '#FF4757',
-                    borderDash: [2, 2],
-                    pointRadius: 0
-                }
-            ]
+            labels: labels,
+            datasets: [{
+                label: 'Attendance %',
+                data: dataPoints,
+                borderColor: '#6C5CE7',
+                backgroundColor: 'rgba(108, 92, 231, 0.1)',
+                fill: true,
+                tension: 0.3
+            }, {
+                label: 'Target',
+                data: Array(labels.length).fill(sessionData.target),
+                borderColor: '#FF4757',
+                borderDash: [5, 5],
+                pointRadius: 0
+            }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: { y: { min: 0, max: 100 } },
-            animation: false 
+            scales: { y: { min: 0, max: 100 } }
         }
     });
 
@@ -548,7 +425,7 @@ function renderAnalytics() {
         data: {
             labels: ['Present', 'Absent', 'Holidays'],
             datasets: [{
-                data: [lastPresentClasses, absent, holiday],
+                data: [present, absent, holiday],
                 backgroundColor: ['#00B894', '#FF4757', '#0984e3']
             }]
         },
@@ -557,100 +434,8 @@ function renderAnalytics() {
             maintainAspectRatio: false
         }
     });
-    
-    updatePredictionGraph(); 
 }
 
-function initPredictionLogic() {
-    const slider = document.getElementById("pred-slider");
-    const attendBtn = document.getElementById("pred-attend");
-    const bunkBtn = document.getElementById("pred-bunk");
-    
-    attendBtn.onclick = null; bunkBtn.onclick = null; slider.oninput = null;
-
-    attendBtn.onclick = () => {
-        predMode = 'attend'; 
-        attendBtn.classList.add("active");
-        bunkBtn.classList.remove("active");
-        updatePredictionText();
-        updatePredictionGraph();
-    };
-    bunkBtn.onclick = () => {
-        predMode = 'bunk'; 
-        bunkBtn.classList.add("active");
-        attendBtn.classList.remove("active");
-        updatePredictionText();
-        updatePredictionGraph();
-    };
-    
-    slider.oninput = (e) => {
-        predSliderValue = e.target.value; 
-        document.getElementById("slider-val-display").innerText = e.target.value;
-        updatePredictionText();
-        updatePredictionGraph();
-    };
-}
-
-function updatePredictionText() {
-    const sliderVal = Number(predSliderValue);
-    const isAttend = (predMode === 'attend');
-    
-    let simTotal = lastTotalClasses;
-    let simPresent = lastPresentClasses;
-    
-    for(let i=1; i<=sliderVal; i++) {
-        simTotal++;
-        if(isAttend) simPresent++;
-    }
-
-    let currentPct = lastTotalClasses === 0 ? 100 : (lastPresentClasses / lastTotalClasses) * 100;
-    let finalPct = (simPresent / simTotal) * 100;
-    let diff = finalPct - currentPct;
-    let diffStr = diff >= 0 ? `+${diff.toFixed(2)}%` : `${diff.toFixed(2)}%`;
-    let color = diff >= 0 ? "var(--success)" : "var(--danger)";
-    let actionWord = isAttend ? "attend" : "bunk";
-    
-    document.getElementById("prediction-text").innerHTML = `
-        If you <b>${actionWord}</b> next <b>${sliderVal}</b> classes:<br>
-        Result: <span class="pred-highlight">${finalPct.toFixed(2)}%</span>
-        (<span style="color:${color}">${diffStr}</span>)
-    `;
-}
-
-function updatePredictionGraph() {
-    if(!trendChart) return; 
-
-    const sliderVal = Number(predSliderValue);
-    const isAttend = (predMode === 'attend');
-    
-    let simTotal = lastTotalClasses;
-    let simPresent = lastPresentClasses;
-    
-    let futureLabels = [];
-    let plotPoints = [];
-
-    let connectPoint = 100; 
-    if(historyData.length > 0) connectPoint = historyData[historyData.length - 1];
-    plotPoints.push(connectPoint); 
-
-    let padding = [];
-    if(historyData.length > 0) padding = Array(historyData.length - 1).fill(null);
-    
-    for(let i=1; i<=sliderVal; i++) {
-        simTotal++;
-        if(isAttend) simPresent++;
-        let newPct = (simPresent / simTotal) * 100;
-        plotPoints.push(newPct.toFixed(1));
-        futureLabels.push(`+${i}`);
-    }
-
-    trendChart.data.labels = [...historyLabels, ...futureLabels];
-    trendChart.data.datasets[1].data = [...padding, ...plotPoints];
-    trendChart.data.datasets[2].data = Array(trendChart.data.labels.length).fill(sessionData.target);
-    trendChart.update('none'); 
-}
-
-// --- STANDARD FUNCTIONS ---
 document.getElementById("edit-target-btn").onclick = () => {
     if(sessionData.status === "Ended") return showToast("Session Frozen", "error");
     document.getElementById("target-input-field").value = sessionData.target;
@@ -660,20 +445,15 @@ document.getElementById("cancel-target-edit").onclick = () => document.getElemen
 document.getElementById("save-target-btn").onclick = async () => {
     let val = Number(document.getElementById("target-input-field").value);
     if(val < 1 || val > 100) return showToast("Invalid Target", "error");
-    try {
-        await updateDoc(doc(db, `users/${targetUid}/sessions`, currentSessionId), { target: val });
-        sessionData.target = val;
-        document.getElementById("edit-target-btn").innerText = `Target: ${val}% ✎`;
-        document.getElementById("target-modal").classList.add("hidden");
-        calculateAttendance(); 
-        showToast("Target Updated", "success");
-    } catch(e) { showToast("Update Failed (Permission Denied)", "error"); }
+    await updateDoc(doc(db, `users/${currentUser.uid}/sessions`, currentSessionId), { target: val });
+    sessionData.target = val;
+    document.getElementById("edit-target-btn").innerText = `Target: ${val}% ✎`;
+    document.getElementById("target-modal").classList.add("hidden");
+    calculateAttendance(); 
+    showToast("Target Updated", "success");
 };
 
-document.getElementById("back-btn").onclick = () => {
-    showScreen('dashboard');
-    loadSessions(); 
-};
+document.getElementById("back-btn").onclick = () => showScreen('dashboard');
 
 function renderCalendar() {
     const grid = document.getElementById("calendar-days");
@@ -727,7 +507,6 @@ function isDefaultHoliday(dateStr) {
     for(let h of fixedHolidays) {
         if(dateStr.endsWith(h) || dateStr === h) return true;
     }
-    if(window.globalHolidaysCache && window.globalHolidaysCache.includes(dateStr)) return true;
     return false;
 }
 
@@ -744,19 +523,17 @@ async function toggleDay(dateStr, currentStatus) {
     renderCalendar();
     calculateAttendance();
 
-    try {
-        const ref = doc(db, `users/${targetUid}/sessions/${currentSessionId}/exceptions`, dateStr);
-        const dataToSave = { status: newStatus };
-        if(sessionExceptions[dateStr].note) dataToSave.note = sessionExceptions[dateStr].note;
+    const ref = doc(db, `users/${currentUser.uid}/sessions/${currentSessionId}/exceptions`, dateStr);
+    const dataToSave = { status: newStatus };
+    if(sessionExceptions[dateStr].note) dataToSave.note = sessionExceptions[dateStr].note;
 
-        if(newStatus === "Present" && !dataToSave.note) {
-            if(isDefaultHoliday(dateStr)) await setDoc(ref, { status: "Present" });
-            else await deleteDoc(ref);
-            if(!isDefaultHoliday(dateStr)) delete sessionExceptions[dateStr];
-        } else {
-            await setDoc(ref, dataToSave);
-        }
-    } catch(e) { showToast("Save Failed (Permission Denied)", "error"); }
+    if(newStatus === "Present" && !dataToSave.note) {
+        if(isDefaultHoliday(dateStr)) await setDoc(ref, { status: "Present" });
+        else await deleteDoc(ref);
+        if(!isDefaultHoliday(dateStr)) delete sessionExceptions[dateStr];
+    } else {
+        await setDoc(ref, dataToSave);
+    }
 }
 
 function openNoteModal(dateStr) {
@@ -774,32 +551,34 @@ document.getElementById("save-note-btn").onclick = async () => {
     const dateStr = selectedDateForNote;
     if(!sessionExceptions[dateStr]) sessionExceptions[dateStr] = { status: "Absent" }; 
     sessionExceptions[dateStr].note = text;
-    try {
-        await setDoc(doc(db, `users/${targetUid}/sessions/${currentSessionId}/exceptions`, dateStr), sessionExceptions[dateStr]);
-        document.getElementById("note-modal").classList.add("hidden");
-        renderCalendar();
-        showToast("Note Saved", "success");
-    } catch(e) { showToast("Save Failed", "error"); }
+    await setDoc(doc(db, `users/${currentUser.uid}/sessions/${currentSessionId}/exceptions`, dateStr), sessionExceptions[dateStr]);
+    document.getElementById("note-modal").classList.add("hidden");
+    renderCalendar();
+    showToast("Note Saved", "success");
 };
 
 document.getElementById("delete-note-btn").onclick = async () => {
     const dateStr = selectedDateForNote;
     if(sessionExceptions[dateStr]) {
         delete sessionExceptions[dateStr].note;
-        try {
-            await setDoc(doc(db, `users/${targetUid}/sessions/${currentSessionId}/exceptions`, dateStr), sessionExceptions[dateStr]);
-            document.getElementById("note-modal").classList.add("hidden");
-            renderCalendar();
-            showToast("Note Deleted", "success");
-        } catch(e) { showToast("Delete Failed", "error"); }
+        await setDoc(doc(db, `users/${currentUser.uid}/sessions/${currentSessionId}/exceptions`, dateStr), sessionExceptions[dateStr]);
     }
+    document.getElementById("note-modal").classList.add("hidden");
+    renderCalendar();
+    showToast("Note Deleted", "success");
 };
 document.getElementById("close-note-modal").onclick = () => document.getElementById("note-modal").classList.add("hidden");
 
+// --- CALCULATIONS ---
 function calculateAttendance() {
     let total = 0, present = 0;
     let loopDate = new Date(sessionData.startDate);
-    const stopDate = sessionData.endDate ? new Date(sessionData.endDate) : new Date();
+    
+    // FIX applied here too just in case, though usually sessionData.endDate handles it if loop stops
+    let stopDate = new Date();
+    if(sessionData.status === 'Ended' && sessionData.endDate) {
+        stopDate = new Date(sessionData.endDate);
+    }
 
     while(loopDate <= stopDate) {
         const dStr = loopDate.toISOString().split('T')[0];
@@ -875,197 +654,31 @@ document.getElementById("cancel-end").onclick = () => document.getElementById("e
 document.getElementById("confirm-end").onclick = async () => {
     const date = document.getElementById("end-session-date").value;
     if(!date) return;
-    try {
-        await updateDoc(doc(db, `users/${targetUid}/sessions`, currentSessionId), { endDate: date, status: "Ended" });
-        document.getElementById("end-modal").classList.add("hidden");
-        loadSessions();
-        showScreen('dashboard');
-    } catch(e) { showToast("Freeze Failed", "error"); }
+    await updateDoc(doc(db, `users/${currentUser.uid}/sessions`, currentSessionId), { endDate: date, status: "Ended" });
+    document.getElementById("end-modal").classList.add("hidden");
+    loadSessions();
+    showScreen('dashboard');
 };
 
-// --- ADMIN GOD MODE ---
 async function checkAdmin() {
-    try {
-        const docSnap = await getDoc(doc(db, "users", currentUser.uid));
-        if(docSnap.exists() && docSnap.data().isAdmin) {
-            document.getElementById("admin-link").classList.remove("hidden");
-            document.getElementById("admin-link").onclick = () => {
-                document.getElementById("admin-god-modal").classList.remove("hidden");
-                loadAdminUsers();
-            };
-        }
-    } catch(e) {}
+    const docSnap = await getDoc(doc(db, "users", currentUser.uid));
+    if(docSnap.exists() && docSnap.data().isAdmin) {
+        document.getElementById("admin-link").classList.remove("hidden");
+        document.getElementById("admin-link").onclick = async () => {
+            document.getElementById("admin-modal").classList.remove("hidden");
+            const list = document.getElementById("admin-list");
+            list.innerHTML = "Loading...";
+            const allUsers = await getDocs(collection(db, "users"));
+            list.innerHTML = "";
+            allUsers.forEach(u => {
+                const d = u.data();
+                const pic = d.photo ? d.photo : "https://via.placeholder.com/30";
+                list.innerHTML += `<div style="border-bottom:1px solid #eee; padding:10px; display:flex; align-items:center; gap:10px;">
+                        <img src="${pic}" style="width:30px; height:30px; border-radius:50%; object-fit:cover;">
+                        <div><b>${d.name}</b><br><small>${d.email}</small></div>
+                    </div>`;
+            });
+        };
+        document.getElementById("close-admin").onclick = () => document.getElementById("admin-modal").classList.add("hidden");
+    }
 }
-
-async function loadAdminUsers() {
-    const list = document.getElementById("view-admin-users");
-    list.innerHTML = "<p style='text-align:center; padding:20px;'>Loading...</p>";
-    try {
-        const snap = await getDocs(collection(db, "users"));
-        list.innerHTML = "";
-        snap.forEach(docSnap => {
-            const u = docSnap.data();
-            const isBanned = u.isBanned === true;
-            const btnText = isBanned ? "UNBAN" : "BAN";
-            const btnClass = isBanned ? "btn-ban banned" : "btn-ban";
-            const pic = u.photo || "https://via.placeholder.com/30";
-            
-            const div = document.createElement("div");
-            div.className = "user-row";
-            div.innerHTML = `
-                <img src="${pic}">
-                <div class="user-row-info"><b>${u.name || 'User'}</b><small>${u.email}</small></div>
-                <div>
-                    <button class="btn-view-as" onclick="window.enterGhostMode('${docSnap.id}', '${u.name}')">👁️ View</button>
-                    <button class="${btnClass}" onclick="window.toggleBan('${docSnap.id}', ${isBanned})">${btnText}</button>
-                </div>
-            `;
-            list.appendChild(div);
-        });
-    } catch(e) { list.innerHTML = "<p style='color:red; text-align:center'>Access Denied</p>"; }
-}
-
-window.enterGhostMode = async (uid, name) => {
-    targetUid = uid;
-    document.getElementById("admin-god-modal").classList.add("hidden");
-    document.getElementById("ghost-mode-banner").classList.remove("hidden");
-    document.getElementById("ghost-target-name").innerText = name;
-    
-    try {
-        const userDoc = await getDoc(doc(db, "users", targetUid));
-        loadProfile(userDoc.data());
-        loadSessions(); 
-        showToast(`Viewing as ${name}`, "success");
-    } catch(e) { showToast("Ghost Mode Failed", "error"); }
-};
-
-document.getElementById("exit-ghost-mode").onclick = async () => {
-    targetUid = currentUser.uid;
-    document.getElementById("ghost-mode-banner").classList.add("hidden");
-    try {
-        const userDoc = await getDoc(doc(db, "users", targetUid));
-        loadProfile(userDoc.data());
-        loadSessions(); 
-        showToast("Exited Ghost Mode");
-    } catch(e) {}
-};
-
-async function loadGlobalHolidays() {
-    try {
-        const snap = await getDocs(collection(db, "global_config", "holidays", "dates"));
-        window.globalHolidaysCache = [];
-        snap.forEach(d => window.globalHolidaysCache.push(d.id));
-    } catch(e) {}
-}
-
-async function loadAdminHolidays() {
-    const list = document.getElementById("global-holidays-list");
-    list.innerHTML = "Loading...";
-    try {
-        const snap = await getDocs(collection(db, "global_config", "holidays", "dates"));
-        list.innerHTML = "";
-        window.globalHolidaysCache = []; 
-        const dates = [];
-        snap.forEach(d => dates.push(d.id));
-        dates.sort();
-        window.globalHolidaysCache = dates;
-
-        dates.forEach(d => {
-            const div = document.createElement("div");
-            div.className = "holiday-row";
-            div.innerHTML = `<span>📅 ${d}</span><button class="btn-trash" onclick="window.deleteGlobalHoliday('${d}')">🗑️</button>`;
-            list.appendChild(div);
-        });
-    } catch(e) { list.innerHTML = "<p style='color:red'>Access Denied</p>"; }
-}
-
-document.getElementById("btn-add-global-holiday").onclick = async () => {
-    const d = document.getElementById("new-global-date").value;
-    if(!d) return;
-    try {
-        await setDoc(doc(db, "global_config", "holidays", "dates", d), { by: currentUser.uid });
-        document.getElementById("new-global-date").value = "";
-        loadAdminHolidays();
-        showToast("Global Holiday Added", "success");
-    } catch(e) { showToast("Access Denied", "error"); }
-};
-
-window.deleteGlobalHoliday = async (d) => {
-    if(!confirm("Delete?")) return;
-    try {
-        await deleteDoc(doc(db, "global_config", "holidays", "dates", d));
-        loadAdminHolidays();
-        showToast("Deleted", "success");
-    } catch(e) { showToast("Access Denied", "error"); }
-};
-
-async function checkGlobalAnnouncements() {
-    try {
-        const docSnap = await getDoc(doc(db, "global_config", "announcements"));
-        if(docSnap.exists() && docSnap.data().text) {
-            document.getElementById("announcement-banner").classList.remove("hidden");
-            document.getElementById("announcement-text").innerText = docSnap.data().text;
-        }
-    } catch(e) {}
-}
-
-document.getElementById("close-announcement").onclick = () => {
-    document.getElementById("announcement-banner").classList.add("hidden");
-};
-
-document.getElementById("btn-send-broadcast").onclick = async () => {
-    const txt = document.getElementById("broadcast-input").value;
-    if(!txt) return;
-    try {
-        await setDoc(doc(db, "global_config", "announcements"), { text: txt });
-        showToast("Broadcast Sent", "success");
-        document.getElementById("broadcast-input").value = "";
-    } catch(e) { showToast("Access Denied", "error"); }
-};
-
-document.getElementById("btn-clear-broadcast").onclick = async () => {
-    try {
-        await deleteDoc(doc(db, "global_config", "announcements"));
-        showToast("Broadcast Cleared", "success");
-    } catch(e) { showToast("Access Denied", "error"); }
-};
-
-window.toggleBan = async (uid, status) => {
-    if(!confirm(status ? "Unban?" : "Ban user?")) return;
-    try {
-        await updateDoc(doc(db, "users", uid), { isBanned: !status });
-        loadAdminUsers();
-        showToast("User updated", "success");
-    } catch(e) { showToast("Access Denied", "error"); }
-};
-
-document.getElementById("tab-admin-users").onclick = () => {
-    document.getElementById("view-admin-users").classList.remove("hidden");
-    document.getElementById("view-admin-holidays").classList.add("hidden");
-    document.getElementById("view-admin-broadcast").classList.add("hidden");
-    document.getElementById("tab-admin-users").classList.add("active");
-    document.getElementById("tab-admin-holidays").classList.remove("active");
-    document.getElementById("tab-admin-broadcast").classList.remove("active");
-    loadAdminUsers();
-};
-document.getElementById("tab-admin-holidays").onclick = () => {
-    document.getElementById("view-admin-users").classList.add("hidden");
-    document.getElementById("view-admin-holidays").classList.remove("hidden");
-    document.getElementById("view-admin-broadcast").classList.add("hidden");
-    document.getElementById("tab-admin-users").classList.remove("active");
-    document.getElementById("tab-admin-holidays").classList.add("active");
-    document.getElementById("tab-admin-broadcast").classList.remove("active");
-    loadAdminHolidays();
-};
-document.getElementById("tab-admin-broadcast").onclick = () => {
-    document.getElementById("view-admin-users").classList.add("hidden");
-    document.getElementById("view-admin-holidays").classList.add("hidden");
-    document.getElementById("view-admin-broadcast").classList.remove("hidden");
-    document.getElementById("tab-admin-users").classList.remove("active");
-    document.getElementById("tab-admin-holidays").classList.remove("active");
-    document.getElementById("tab-admin-broadcast").classList.add("active");
-};
-document.getElementById("close-god-mode").onclick = () => {
-    document.getElementById("admin-god-modal").classList.add("hidden");
-    if(currentSessionId) renderCalendar();
-};
